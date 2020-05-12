@@ -1,2 +1,2 @@
-# gcn_fingerprinting
-Siamese GCNs for performing subject fingerprinting on ACERTA project data.
+# GCN Fingerprinting
+Application of Siamese Graph Convolutional Networks for a subject fingerprinting task on data from the ACERTA project.
