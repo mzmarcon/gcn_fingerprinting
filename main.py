@@ -12,9 +12,7 @@ import sys
 from collections import defaultdict
 import torch.nn.functional as F
 
-# def main():
 if __name__ == '__main__':
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Device:',device)
     
@@ -23,9 +21,9 @@ if __name__ == '__main__':
     params = { 'model': 'sage',
                'train_batch_size': 1,
                'test_batch_size': 1,
-               'learning_rate': 1e-6,
+               'learning_rate': 5e-6,
                'weight_decay': 1e-1,
-               'epochs': 100,
+               'epochs': 1000,
                'early_stop': 10,
                'dropout': 0.5}
     
@@ -39,8 +37,7 @@ if __name__ == '__main__':
     
 
     nfeat = train_loader.__iter__().__next__()['input1']['x'].shape[1]
-    # criterion = nn.HingeEmbeddingLoss()
-    # criterion = nn.BCEWithLogitsLoss()
+
     criterion = ContrastiveLoss(margin=2.0)
     
     if params['model'] == 'gcn':
@@ -51,7 +48,7 @@ if __name__ == '__main__':
 
     if params['model'] == 'sage':
         model = GeoSAGEConv(nfeat=nfeat,
-                            nhid=64,
+                            nhid=32,
                             nclass=1,
                             dropout=params['dropout'])
 
@@ -66,7 +63,7 @@ if __name__ == '__main__':
                                 weight_decay=params['weight_decay'])
 
     for e in range(params['epochs']):
-        print('Epoch:',e)
+        print('Epoch: {}/{}'.format(e,params['epochs']))
 
         model.train()
         match_losses = []
@@ -80,7 +77,6 @@ if __name__ == '__main__':
             input_data_nomatch = data['input_nomatch'].to(device)
 
             #Match pair:
-            # out1, out2 = model(input_data1,input_data_match)
             out1 = model(input_data1)
             out2 = model(input_data_match)
             label = label_match.to(device)
@@ -92,7 +88,6 @@ if __name__ == '__main__':
             optimizer.step()
             
             #No-match pair:
-            # out1, out2 = model(input_data1,input_data_nomatch)
             out1 = model(input_data1)
             out2 = model(input_data_nomatch)
             label = label_nomatch.to(device)
@@ -110,17 +105,17 @@ if __name__ == '__main__':
         correct=0
         with torch.no_grad():
             for i, data in enumerate(test_loader):
-                if not i==3: continue
+                if not i==2: continue
                 print("i: ",i)
                 input_data1 = data['input1'].to(device)
                 label = len(data['other'])-1
                 similarities = defaultdict(list)
+
                 #Compare example to each example in the test set:
                 for n in range(len(data['other'])):
-                    # print("Iterating {}:{}".format(i,n))
                     input_test = data['other'][n].to(device)
+
                     #Get pair similarity:
-                    # out1, out2 = model(input_data1,input_test)
                     out1 = model(input_data1)
                     out2 = model(input_test)
                     similarity = F.pairwise_distance(out1, out2)
@@ -138,44 +133,6 @@ if __name__ == '__main__':
             accuracy = correct/len(test_set)
             print('Test Accuracy: {:.3f}'.format(accuracy))
             print('----------------------')
-            # if e == 2: break
-        # model.eval()
-        # correct=0
-        # with torch.no_grad():
-        #     for i, data in enumerate(test_loader):
-        #         input_data1 = data['input1'].to(device)
-        #         similarities = defaultdict(list)
-        #         # Compare example to each example in the test set:
-        #         for n, test_data in enumerate(test_loader):
-        #             if not i==n:
-        #                 print("Iterating {}:{}".format(i,n))
-        #                 input_test = test_data['input1'].to(device)
-        #                 # Get index of correct match as label
-        #                 if (input_data1['label']==input_test['label']).all():
-        #                     label = n
-        #                 # Get pair similarity:
 
-        #                 out1, out2 = model(input_data1,input_test)
-        #                 similarity = F.pairwise_distance(out1, out2)
-        #                 similarities[n].append(similarity)
-        #         sys.exit()
-                
-                
-        #         prediction = min(similarities, key=similarities.get)
-        #         print("Prediction {}:{}".format(i,prediction))
-        #         if prediction == label:
-        #             correct = correct+1
-        #             print("Correct")
-        #         else:
-        #             print("Fail")
-    
-        #     accuracy = correct/len(test_set)
-        #     print('Test Accuracy: {:.3f}'.format(accuracy))
-        #     print('----------------------')
-        #     sys.exit()
 
     # torch.save(model.state_dict(), checkpoint)
-
-
-# if __name__ == '__main__':
-#     main()

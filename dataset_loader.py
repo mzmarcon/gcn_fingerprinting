@@ -100,23 +100,6 @@ class ACERTA_data(Dataset):
 
         return train, test
 
-    # def process_dataset(self,file_rst,file_task,ids,labels_dict):
-    #     dataset = []
-    #     adj_rst = self.generate_mean_adj(file_rst,ids)
-
-    #     for visit in ['visit1','visit2']:
-    #         for id in ids:
-
-    #             features = torch.FloatTensor(file_task[visit][id]['region_values'][:])
-    #             # data = Data(x=features, edge_index=adj_rst._indices(), edge_attr=adj_rst._values())
-    #             dataset.append({
-    #                 'features': features,
-    #                 'label': labels_dict[id],
-    #                 'edge_index': adj_rst._indices(),
-    #                 'edge_attr': adj_rst._values()
-    #             })
-    #     return dataset
-
     def process_dataset(self,file_rst,file_task,ids,labels_dict):
         dataset = []
         adj_rst = self.generate_mean_adj(file_rst,ids)
@@ -161,8 +144,8 @@ class ACERTA_data(Dataset):
         
         cn_matrix = np.mean(cn_matrix_list,axis=0)
 
-        # mask_rst, _ = get_adjacency(cn_matrix,0.5)
-        adj_rst = sparse.coo_matrix(cn_matrix)
+        mask_rst, _ = get_adjacency(cn_matrix,0.5)
+        adj_rst = sparse.coo_matrix(mask_rst)
         adj_rst = torch.sparse_coo_tensor(torch.LongTensor(np.vstack((adj_rst.row, adj_rst.col))),
                                             torch.FloatTensor(adj_rst.data),
                                             adj_rst.shape)
