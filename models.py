@@ -15,16 +15,33 @@ class Siamese_GeoChebyConv(nn.Module):
         self.gc2 = ChebConv(nhid, nclass, K)
         self.dropout = dropout
 
+        self.classifier = nn.Sequential(
+            nn.Linear(200, 100),
+            # nn.BatchNorm1d(100),
+            nn.ReLU(),
+            nn.Dropout(),
+            nn.Linear(100, 50),
+            nn.ReLU(),
+            nn.Dropout(),
+            nn.Linear(50, 10),
+            # nn.BatchNorm1d(),
+            # nn.ReLU()
+            # nn.Sigmoid()
+        )
+
     def forward_single(self, data):
-        x = F.relu(self.gc1(data['x'].T, edge_index=data['edge_index']))
+        x = F.relu(self.gc1(data['x'], edge_index=data['edge_index'], edge_weight=data['edge_attr']))
         x = F.dropout(x, self.dropout, training=self.training)
-        x = self.gc2(x.T, edge_index=data['edge_index'])
+        x = self.gc2(x, edge_index=data['edge_index'], edge_weight=data['edge_attr'])
         # return F.log_softmax(x, dim=1)
         return x
 
     def forward(self, data1, data2):
         out1 = self.forward_single(data1)
         out2 = self.forward_single(data2)
+
+        out1 = self.classifier(out1.T)
+        out2 = self.classifier(out2.T)
         # dis = torch.abs(out1 - out2)
         # out = nn.Linear(dis)
         # return F.log_softmax(x, dim=1)
@@ -33,11 +50,11 @@ class Siamese_GeoChebyConv(nn.Module):
 
 class Siamese_GeoSAGEConv(nn.Module):
     def __init__(self, nfeat, nhid, nclass, dropout):
-        super(GeoSAGEConv,self).__init__()
+        super(Siamese_GeoSAGEConv,self).__init__()
 
         nclass = int(nclass)
-        self.gc1 = SAGEConv(nfeat, nhid, normalize=True)
-        self.gc2 = SAGEConv(nhid, nclass, normalize=True)
+        self.gc1 = SAGEConv(nfeat, nhid, normalize=False)
+        self.gc2 = SAGEConv(nhid, nclass, normalize=False)
         self.dropout = dropout
 
         self.classifier = nn.Sequential(
@@ -48,7 +65,7 @@ class Siamese_GeoSAGEConv(nn.Module):
             nn.Linear(100, 50),
             nn.ReLU(),
             nn.Dropout(),
-            nn.Linear(50, 5),
+            nn.Linear(50, 10),
             # nn.BatchNorm1d(),
             # nn.ReLU()
             # nn.Sigmoid()
@@ -56,23 +73,20 @@ class Siamese_GeoSAGEConv(nn.Module):
 
     def forward_single(self, data):
         # data = Data(x=features, edge_index=adj._indices())
-        x = F.relu(self.gc1(data['x'], edge_index=data['edge_index']))
+        x = F.relu(self.gc1(data['x'], edge_index=data['edge_index'], edge_weight=data['edge_attr']))
         x = F.dropout(x, self.dropout, training=self.training)
-        x = self.gc2(x, edge_index=data['edge_index'])
+        x = self.gc2(x, edge_index=data['edge_index'], edge_weight=data['edge_attr'])
         # return F.log_softmax(x, dim=1)
         return x
 
     def forward(self, data1, data2):
         out1 = self.forward_single(data1)
         out2 = self.forward_single(data2)
-        # dis = torch.abs(out1 - out2)
-        # out = torch.abs(out1 - out2)
         out1 = self.classifier(out1.T)
         out2 = self.classifier(out2.T)
         # return F.log_softmax(x, dim=1)
-        # return F.softmax(out1,dim=0), F.softmax(out2,dim=0)
+        # return F.softmax(out1,dim=1), F.softmax(out2,dim=1)
         return out1, out2
-        # return out1
 
 class GeoSAGEConv(nn.Module):
     def __init__(self, nfeat, nhid, nclass, dropout):
@@ -96,16 +110,10 @@ class GeoSAGEConv(nn.Module):
             # nn.Sigmoid()
         )
 
-    def forward_single(self, data):
+    def forward(self, data):
         x = F.relu(self.gc1(data['x'], edge_index=data['edge_index'], edge_weight=data['edge_attr']))
         x = F.dropout(x, self.dropout, training=self.training)
         x = self.gc2(x, edge_index=data['edge_index'], edge_weight=data['edge_attr'])
+        x = self.classifier(x.T)
         # return F.log_softmax(x, dim=1)
         return x
-
-    def forward(self, data):
-        out = self.forward_single(data)
-        out = self.classifier(out.T)
-        # return F.log_softmax(x, dim=1)
-        # return F.softmax(out1,dim=1), F.softmax(out2,dim=1)
-        return out
