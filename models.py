@@ -12,7 +12,9 @@ class Siamese_GeoChebyConv(nn.Module):
         K = 3
         nclass = int(nclass)
         self.gc1 = ChebConv(nfeat, nhid, K)
-        self.gc2 = ChebConv(nhid, nclass, K)
+        # self.gc2 = ChebConv(nhid, 2*nhid, K)
+        # self.gc3 = ChebConv(2*nhid, nhid, K)
+        self.gc4 = ChebConv(nhid, nclass, K)
         self.dropout = dropout
 
         self.classifier = nn.Sequential(
@@ -25,14 +27,16 @@ class Siamese_GeoChebyConv(nn.Module):
             nn.Dropout(),
             nn.Linear(50, 10),
             # nn.BatchNorm1d(),
-            # nn.ReLU()
-            # nn.Sigmoid()
         )
 
     def forward_single(self, data):
         x = F.relu(self.gc1(data['x'], edge_index=data['edge_index'], edge_weight=data['edge_attr']))
         x = F.dropout(x, self.dropout, training=self.training)
-        x = self.gc2(x, edge_index=data['edge_index'], edge_weight=data['edge_attr'])
+        # x = self.gc2(x, edge_index=data['edge_index'], edge_weight=data['edge_attr'])
+        # x = F.dropout(x, self.dropout, training=self.training)
+        # x = self.gc3(x, edge_index=data['edge_index'], edge_weight=data['edge_attr'])
+        # x = F.dropout(x, self.dropout, training=self.training)
+        x = self.gc4(x, edge_index=data['edge_index'], edge_weight=data['edge_attr'])
         # return F.log_softmax(x, dim=1)
         return x
 

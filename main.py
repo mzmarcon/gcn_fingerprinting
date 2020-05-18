@@ -22,7 +22,7 @@ if __name__ == '__main__':
     params = { 'model': 'gcn_cheby',
                'train_batch_size': 1,
                'test_batch_size': 1,
-               'learning_rate': 1e-5,
+               'learning_rate': 2e-6,
                'weight_decay': 1e-1,
                'epochs': 1000,
                'early_stop': 10,
@@ -55,7 +55,7 @@ if __name__ == '__main__':
 
     if params['model'] == 'gcn_cheby':
         model = Siamese_GeoChebyConv(nfeat=nfeat,
-                                     nhid=32,
+                                     nhid=16,
                                      nclass=1,
                                      dropout=params['dropout'])
     model.to(device)
@@ -69,9 +69,9 @@ if __name__ == '__main__':
     nomatch_losses = []
     delta_loss = defaultdict(list)
     accuracy_list = []
+    mean_delta_list =[]
     for e in range(params['epochs']):
-        print('Epoch: {}/{}'.format(e,params['epochs']))
-
+        # print('Epoch: {}/{}'.format(e,params['epochs']))
         model.train()
         label_match = torch.FloatTensor([0])
         label_nomatch = torch.FloatTensor([1])
@@ -82,26 +82,22 @@ if __name__ == '__main__':
 
             #Match pair:
             out1, out2 = model(input_data1,input_data_match)
-            # out1 = model(input_data1)
-            # out2 = model(input_data_match)
             label = label_match.to(device)
 
-            loss = criterion(out1, out2, label)
-            match_losses.append(loss.item())
+            match_loss = criterion(out1, out2, label)
+            match_losses.append(match_loss.item())
             optimizer.zero_grad()
-            loss.backward()
+            match_loss.backward()
             optimizer.step()
             
             #No-match pair:
             out1, out2 = model(input_data1,input_data_nomatch)
-            # out1 = model(input_data1)
-            # out2 = model(input_data_nomatch)
             label = label_nomatch.to(device)
 
-            loss = criterion(out1, out2, label)
-            nomatch_losses.append(loss.item())
+            nomatch_loss = criterion(out1, out2, label)
+            nomatch_losses.append(nomatch_loss.item())
             optimizer.zero_grad()
-            loss.backward()
+            nomatch_loss.backward()
             optimizer.step()
         
             counter += 1
@@ -123,29 +119,24 @@ if __name__ == '__main__':
                     out1, out2 = model(input_data1,input_test)
                     similarity = F.pairwise_distance(out1, out2)
                     similarities[n].append(similarity)
-                # print('Similarities:\n',similarities)
 
-                # if not i==2: continue
                 prediction = min(similarities, key=similarities.get)
-                # print("Sub :{} Pred:{} True: {}".format(i,prediction,label))
                 # print("Sub :{} Pred:{} True: {}".format(i,similarities[prediction],similarities[label]))
                 delta = torch.abs(similarities[prediction][0]-similarities[label][0])
                 print("Diff delta: ",delta)
                 delta_loss[i].append(delta)
                 if prediction == label:
                     correct = correct+1
-                    print("Correct")
-                else:
-                    print("Fail")
     
+            mean_delta = torch.mean(torch.tensor([v[-1] for (k,v) in delta_loss.items()]))
+            mean_delta_list.append(mean_delta)
+
             accuracy = correct/len(test_set)
             accuracy_list.append(accuracy)
 
-            print('Training Match Loss: {:.3f}'.format(np.mean(match_losses[-1])))
-            print('Training No-Match Loss: {:.3f}'.format(np.mean(nomatch_losses[-1])))
-            print('Test Accuracy: {:.3f}'.format(accuracy))
-            print('----------------------')
-        
+            log = 'Epoch: {:03d}, train_Tloss: {:.3f}, train_Floss:{:.3f}, test_acc: {:.3f}, mean_delta: {:.3f}'
+            print(log.format(e,match_loss,nomatch_loss,accuracy,mean_delta))
+        if e==10:break
     
     plt.plot(range(counter),match_losses, label='Match loss')
     plt.plot(range(counter),nomatch_losses, label='No-match loss')
@@ -166,6 +157,14 @@ if __name__ == '__main__':
     plt.title('Accuracy per epoch') 
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy')
+    plt.grid()
+    plt.show()
+
+    plt.plot(range(e+1),mean_delta_list)
+    plt.title('Mean delta per epoch') 
+    plt.xlabel('Epoch')
+    plt.ylabel('Mean delta')
+    plt.grid()
     plt.show()
 
     # torch.save(model.state_dict(), checkpoint)
