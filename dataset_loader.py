@@ -61,20 +61,11 @@ class ACERTA_data(Dataset):
             if not n_rnd in [idx,n_match]:
                 data_nomatch = self.dataset[n_rnd]
                 break
-
-        data_other = []
-        #get example from same class
-        for n in range(len(self.dataset)): 
-            if not n in [idx,n_match]:
-                data_other.append(self.dataset[n]['graph'])
-        #add match as last element
-        data_other.append(self.dataset[n_match]['graph'])
         
         return {
             'input1'                : data1['graph'],
             'input_match'           : data_match['graph'],
-            'input_nomatch'         : data_nomatch['graph'],
-            'other'                  : data_other
+            'input_nomatch'         : data_nomatch['graph']
         }
 
 
@@ -109,6 +100,7 @@ class ACERTA_data(Dataset):
                 features = torch.FloatTensor(file_task[visit][id]['region_values'][:]).view(-1,1)
                 data = Data(x=features, edge_index=adj_rst._indices(), 
                             edge_attr=adj_rst._values(),label=torch.LongTensor(labels_dict[id]))
+                data.id = (id, visit)
                 dataset.append({
                     'graph': data
                 })

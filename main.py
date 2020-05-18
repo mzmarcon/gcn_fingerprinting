@@ -107,23 +107,36 @@ if __name__ == '__main__':
         with torch.no_grad():
             for i, data in enumerate(test_loader):
                 # if not i==2: continue
+                data1_id, data1_visit = data['input1']['id'][0]
+                #ensure visit1 to visit2 test                
+                if data1_visit == 'visit2': continue
                 input_data1 = data['input1'].to(device)
-                label = len(data['other'])-1
+                label = data1_id
                 similarities = defaultdict(list)
 
                 #Compare example to each example in the test set:
-                for n in range(len(data['other'])):
-                    input_test = data['other'][n].to(device)
+                for n, data_test in enumerate(test_loader):
+                    data_test_id, data_test_visit = data_test['input1']['id'][0]
+                    # if not n == i:
 
+                    if data_test_visit == 'visit1': continue
+                    input_test = data_test['input1'].to(device)
+                    # if data_test_id==label:
+                        # label = n
+                        # print('id: ',i)
+                        # print('label: ',data_test_id)
+                        # print('id1:{} | visit1:{}'.format(data1_id,data1_visit))
+                        # print('id_test:{} | visit_test:{}'.format(data_test_id,data_test_visit))
+                    
                     #Get pair similarity:
                     out1, out2 = model(input_data1,input_test)
                     similarity = F.pairwise_distance(out1, out2)
-                    similarities[n].append(similarity)
+                    similarities[data_test_id].append(similarity)
 
                 prediction = min(similarities, key=similarities.get)
-                # print("Sub :{} Pred:{} True: {}".format(i,similarities[prediction],similarities[label]))
+                # print("Sub :{} Pred:{} True: {}".format(data1_id,prediction,label))
                 delta = torch.abs(similarities[prediction][0]-similarities[label][0])
-                print("Diff delta: ",delta)
+                # print("Diff delta: ",delta)
                 delta_loss[i].append(delta)
                 if prediction == label:
                     correct = correct+1
@@ -136,7 +149,7 @@ if __name__ == '__main__':
 
             log = 'Epoch: {:03d}, train_Tloss: {:.3f}, train_Floss:{:.3f}, test_acc: {:.3f}, mean_delta: {:.3f}'
             print(log.format(e,match_loss,nomatch_loss,accuracy,mean_delta))
-        if e==10:break
+        # if e==10:break
     
     plt.plot(range(counter),match_losses, label='Match loss')
     plt.plot(range(counter),nomatch_losses, label='No-match loss')
