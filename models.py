@@ -25,7 +25,7 @@ class Siamese_GeoChebyConv(nn.Module):
             nn.Linear(100, 50),
             nn.ReLU(),
             nn.Dropout(),
-            nn.Linear(50, 10),
+            nn.Linear(50, 1),
             # nn.BatchNorm1d(),
         )
 

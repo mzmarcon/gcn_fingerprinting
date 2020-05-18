@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import torch.nn as nn
-# from torch.utils.data import DataLoader
 from torch_geometric.data import DataLoader
 from torch.autograd import Variable
 from dataset_loader import ACERTA_data
@@ -22,7 +21,7 @@ if __name__ == '__main__':
     params = { 'model': 'gcn_cheby',
                'train_batch_size': 1,
                'test_batch_size': 1,
-               'learning_rate': 2e-6,
+               'learning_rate': 1e-4,
                'weight_decay': 1e-1,
                'epochs': 1000,
                'early_stop': 10,
@@ -63,6 +62,8 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=params['learning_rate'],
                                 weight_decay=params['weight_decay'])
 
+    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
+                                             milestones=[30,80,120,150,200,300,500], gamma=0.5)
 
     counter=0
     match_losses = []
@@ -99,9 +100,11 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             nomatch_loss.backward()
             optimizer.step()
-        
+
             counter += 1
-       
+
+        lr_scheduler.step()
+
         model.eval()
         correct=0
         with torch.no_grad():
@@ -117,17 +120,10 @@ if __name__ == '__main__':
                 #Compare example to each example in the test set:
                 for n, data_test in enumerate(test_loader):
                     data_test_id, data_test_visit = data_test['input1']['id'][0]
-                    # if not n == i:
 
                     if data_test_visit == 'visit1': continue
                     input_test = data_test['input1'].to(device)
-                    # if data_test_id==label:
-                        # label = n
-                        # print('id: ',i)
-                        # print('label: ',data_test_id)
-                        # print('id1:{} | visit1:{}'.format(data1_id,data1_visit))
-                        # print('id_test:{} | visit_test:{}'.format(data_test_id,data_test_visit))
-                    
+
                     #Get pair similarity:
                     out1, out2 = model(input_data1,input_test)
                     similarity = F.pairwise_distance(out1, out2)
@@ -136,7 +132,7 @@ if __name__ == '__main__':
                 prediction = min(similarities, key=similarities.get)
                 # print("Sub :{} Pred:{} True: {}".format(data1_id,prediction,label))
                 delta = torch.abs(similarities[prediction][0]-similarities[label][0])
-                # print("Diff delta: ",delta)
+                print("Diff delta: ",delta)
                 delta_loss[i].append(delta)
                 if prediction == label:
                     correct = correct+1
@@ -144,12 +140,12 @@ if __name__ == '__main__':
             mean_delta = torch.mean(torch.tensor([v[-1] for (k,v) in delta_loss.items()]))
             mean_delta_list.append(mean_delta)
 
-            accuracy = correct/len(test_set)
+            accuracy = correct/(len(test_set)//2)
             accuracy_list.append(accuracy)
 
-            log = 'Epoch: {:03d}, train_Tloss: {:.3f}, train_Floss:{:.3f}, test_acc: {:.3f}, mean_delta: {:.3f}'
-            print(log.format(e,match_loss,nomatch_loss,accuracy,mean_delta))
-        # if e==10:break
+            log = 'Epoch: {:03d}, train_Tloss: {:.3f}, train_Floss:{:.3f}, test_acc: {:.3f}, mean_delta: {:.4f}, lr: {:.2E}'
+            print(log.format(e,match_loss,nomatch_loss,accuracy,mean_delta,optimizer.param_groups[0]['lr']))
+        # if e==100:break
     
     plt.plot(range(counter),match_losses, label='Match loss')
     plt.plot(range(counter),nomatch_losses, label='No-match loss')
