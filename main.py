@@ -21,7 +21,7 @@ if __name__ == '__main__':
     params = { 'model': 'gcn_cheby',
                'train_batch_size': 1,
                'test_batch_size': 1,
-               'learning_rate': 1e-4,
+               'learning_rate': 5e-5,
                'weight_decay': 1e-1,
                'epochs': 1000,
                'early_stop': 10,
@@ -37,8 +37,9 @@ if __name__ == '__main__':
     
 
     nfeat = train_loader.__iter__().__next__()['input1']['x'].shape[1]
+    print("NFEAT: ",nfeat)
 
-    criterion = ContrastiveLoss(margin=2.0)
+    criterion = ContrastiveLoss(margin=0.2)
     
     if params['model'] == 'gcn':
         model = GCN(nfeat=nfeat,
@@ -62,8 +63,11 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=params['learning_rate'],
                                 weight_decay=params['weight_decay'])
 
+    # lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
+    #                                          milestones=[20,80,100,120,150,250,500,1000], gamma=0.5)
+
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-                                             milestones=[30,80,120,150,200,300,500], gamma=0.5)
+                                             milestones=[10,30,60,100,160,250,450], gamma=0.5)
 
     counter=0
     match_losses = []
@@ -154,6 +158,8 @@ if __name__ == '__main__':
     plt.ylabel('Loss')
     plt.legend()
     plt.show()
+
+    np.savez('outfile.npz', match=match_losses, nomatch=nomatch_losses, counter=counter, accuracy=accuracy_list, delta=mean_delta_list)
 
     for key in [k for (k,v) in delta_loss.items()]:
         plt.plot(delta_loss[key])

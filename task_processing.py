@@ -12,7 +12,7 @@ def extract_region_values(file_list, atlas_path):
     altas_flat = atlas_data.flatten()
 
     #get indices for the voxels of each label
-    print("Getting atlas indices")
+    print("Calculating atlas indices")
     index_dict = defaultdict(list)
     for index in indices[1:]:
         for n in range(len(altas_flat)):
@@ -21,7 +21,7 @@ def extract_region_values(file_list, atlas_path):
     #get mean value for each region for each subject
     region_means = []
     for file in file_list:
-        print("Getting mean values for subject: {}".format(file.split('.')[-3]))
+        print("Calculating mean values for subject: {}".format(file.split('.')[-3]))
         fdata = nib.load(file).get_fdata()
         fdata_flatten = fdata.flatten()
         subject_means = []

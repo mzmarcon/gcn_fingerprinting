@@ -14,7 +14,8 @@ class ACERTA_data(Dataset):
     def __init__(self, set, split=0.8, transform=None):
         data_path = './'
         rst_data_file = data_path + 'rst_cn_data.hdf5'
-        task_data_file = data_path + 'task_data.hdf5'
+        # task_data_file = data_path + 'task_data.hdf5'
+        task_data_file = data_path + 'betas_data.hdf5'
                 
         file_rst = h5py.File(rst_data_file, 'r')
         file_task = h5py.File(task_data_file, 'r')
@@ -28,6 +29,8 @@ class ACERTA_data(Dataset):
         common_v2 = self.common_elements(ids_rst_v2,ids_task_v2)
         common_ids = self.common_elements(common_v1,common_v2)
 
+        print('Common len: ',len(common_ids))
+
         enc = OneHotEncoder(handle_unknown='ignore')
         enc_ids = enc.fit_transform(np.array(common_ids).reshape(-1,1)).toarray()
 
@@ -38,10 +41,10 @@ class ACERTA_data(Dataset):
         train_ids, test_ids = self.split_train_test(common_ids,size=split)
 
         if set == 'training':
-            self.dataset = self.process_dataset(file_rst,file_task,train_ids,labels_dict)
+            self.dataset = self.process_betas_dataset(file_rst,file_task,train_ids,labels_dict)
             
         if set == 'test':
-            self.dataset = self.process_dataset(file_rst,file_task,test_ids,labels_dict)
+            self.dataset = self.process_betas_dataset(file_rst,file_task,test_ids,labels_dict)
 
 
     def __getitem__(self, idx):
@@ -98,6 +101,21 @@ class ACERTA_data(Dataset):
         for visit in ['visit1','visit2']:
             for id in ids:
                 features = torch.FloatTensor(file_task[visit][id]['region_values'][:]).view(-1,1)
+                data = Data(x=features, edge_index=adj_rst._indices(), 
+                            edge_attr=adj_rst._values(),label=torch.LongTensor(labels_dict[id]))
+                data.id = (id, visit)
+                dataset.append({
+                    'graph': data
+                })
+        return dataset
+
+    def process_betas_dataset(self,file_rst,file_task,ids,labels_dict):
+        dataset = []
+        adj_rst = self.generate_mean_adj(file_rst,ids)
+
+        for visit in ['visit1','visit2']:
+            for id in ids:
+                features = torch.FloatTensor(file_task[visit][id]['betas_rois'][:])
                 data = Data(x=features, edge_index=adj_rst._indices(), 
                             edge_attr=adj_rst._values(),label=torch.LongTensor(labels_dict[id]))
                 data.id = (id, visit)

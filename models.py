@@ -27,6 +27,7 @@ class Siamese_GeoChebyConv(nn.Module):
             nn.Dropout(),
             nn.Linear(50, 1),
             # nn.BatchNorm1d(),
+            nn.Sigmoid()
         )
 
     def forward_single(self, data):
