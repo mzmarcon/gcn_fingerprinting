@@ -22,10 +22,10 @@ class Siamese_GeoChebyConv(nn.Module):
             # nn.BatchNorm1d(100),
             nn.ReLU(),
             nn.Dropout(),
-            nn.Linear(100, 50),
-            nn.ReLU(),
-            nn.Dropout(),
-            nn.Linear(50, 1),
+            nn.Linear(100, 60),
+            # nn.ReLU(),
+            # nn.Dropout(),
+            # nn.Linear(50, 10),
             # nn.BatchNorm1d(),
             nn.Sigmoid()
         )

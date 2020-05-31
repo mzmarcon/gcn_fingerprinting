@@ -69,6 +69,33 @@ def sparse_to_tuple(sparse_mx):
 
     return sparse_mx
 
+def triple_loss(a, p, n, margin=0.2) : 
+    d = nn.PairwiseDistance(p=2)
+    distance = d(a, p) - d(a, n) + margin 
+    loss = torch.mean(torch.max(distance, torch.zeros_like(distance))) 
+    return loss
+
+class TripletLoss(torch.nn.Module):
+    """
+    Contrastive loss function.
+    Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
+    """
+
+    def __init__(self, margin=0.2):
+        super(TripletLoss, self).__init__()
+        self.margin = margin
+
+
+    def forward(self, anchor, positive, negative) : 
+        d = torch.nn.PairwiseDistance(p=2)
+        distance = d(anchor, positive) - d(anchor, negative) + self.margin 
+        triplet_loss = torch.mean(torch.max(distance, torch.zeros_like(distance))) 
+        return triplet_loss
+
+        return triplet_loss
+
+
+
 class ContrastiveLoss(torch.nn.Module):
     """
     Contrastive loss function.
@@ -86,3 +113,4 @@ class ContrastiveLoss(torch.nn.Module):
 
 
         return loss_contrastive
+

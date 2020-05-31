@@ -11,6 +11,7 @@ import sys
 from collections import defaultdict
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -21,9 +22,9 @@ if __name__ == '__main__':
     params = { 'model': 'gcn_cheby',
                'train_batch_size': 1,
                'test_batch_size': 1,
-               'learning_rate': 5e-5,
+               'learning_rate': 5e-4,
                'weight_decay': 1e-1,
-               'epochs': 1000,
+               'epochs': 450,
                'early_stop': 10,
                'dropout': 0.5}
     
@@ -63,11 +64,9 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=params['learning_rate'],
                                 weight_decay=params['weight_decay'])
 
-    # lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-    #                                          milestones=[20,80,100,120,150,250,500,1000], gamma=0.5)
-
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-                                             milestones=[10,30,60,100,160,250,450], gamma=0.5)
+                                             milestones=[60,100,160,250,450,1000,1500], gamma=0.5)
+
 
     counter=0
     match_losses = []
@@ -76,11 +75,10 @@ if __name__ == '__main__':
     accuracy_list = []
     mean_delta_list =[]
     for e in range(params['epochs']):
-        # print('Epoch: {}/{}'.format(e,params['epochs']))
         model.train()
         label_match = torch.FloatTensor([0])
         label_nomatch = torch.FloatTensor([1])
-        for i, data in enumerate(train_loader):
+        for i, data in enumerate(tqdm(train_loader)):
             input_data1 = data['input1'].to(device)
             input_data_match = data['input_match'].to(device)
             input_data_nomatch = data['input_nomatch'].to(device)
@@ -111,14 +109,21 @@ if __name__ == '__main__':
 
         model.eval()
         correct=0
+        similar_list=[]
+        seen_labels = [] #assure only one example per subject is seen in test
         with torch.no_grad():
             for i, data in enumerate(test_loader):
-                # if not i==2: continue
                 data1_id, data1_visit = data['input1']['id'][0]
-                #ensure visit1 to visit2 test                
-                if data1_visit == 'visit2': continue
+                            
+                if data1_visit == 'visit2': continue #ensure visit1 to visit2 test    
                 input_data1 = data['input1'].to(device)
+
                 label = data1_id
+                if not label in seen_labels:
+                    seen_labels.append(label)
+                #skip subject if already seen
+                else: 
+                    continue 
                 similarities = defaultdict(list)
 
                 #Compare example to each example in the test set:
@@ -134,13 +139,13 @@ if __name__ == '__main__':
                     similarities[data_test_id].append(similarity)
 
                 prediction = min(similarities, key=similarities.get)
-                # print("Sub :{} Pred:{} True: {}".format(data1_id,prediction,label))
                 delta = torch.abs(similarities[prediction][0]-similarities[label][0])
                 print("Diff delta: ",delta)
                 delta_loss[i].append(delta)
                 if prediction == label:
                     correct = correct+1
     
+                similar_list.append(similarities)
             mean_delta = torch.mean(torch.tensor([v[-1] for (k,v) in delta_loss.items()]))
             mean_delta_list.append(mean_delta)
 
@@ -149,7 +154,6 @@ if __name__ == '__main__':
 
             log = 'Epoch: {:03d}, train_Tloss: {:.3f}, train_Floss:{:.3f}, test_acc: {:.3f}, mean_delta: {:.4f}, lr: {:.2E}'
             print(log.format(e,match_loss,nomatch_loss,accuracy,mean_delta,optimizer.param_groups[0]['lr']))
-        # if e==100:break
     
     plt.plot(range(counter),match_losses, label='Match loss')
     plt.plot(range(counter),nomatch_losses, label='No-match loss')
