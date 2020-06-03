@@ -69,33 +69,6 @@ def sparse_to_tuple(sparse_mx):
 
     return sparse_mx
 
-def triple_loss(a, p, n, margin=0.2) : 
-    d = nn.PairwiseDistance(p=2)
-    distance = d(a, p) - d(a, n) + margin 
-    loss = torch.mean(torch.max(distance, torch.zeros_like(distance))) 
-    return loss
-
-class TripletLoss(torch.nn.Module):
-    """
-    Contrastive loss function.
-    Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
-    """
-
-    def __init__(self, margin=0.2):
-        super(TripletLoss, self).__init__()
-        self.margin = margin
-
-
-    def forward(self, anchor, positive, negative) : 
-        d = torch.nn.PairwiseDistance(p=2)
-        distance = d(anchor, positive) - d(anchor, negative) + self.margin 
-        triplet_loss = torch.mean(torch.max(distance, torch.zeros_like(distance))) 
-        return triplet_loss
-
-        return triplet_loss
-
-
-
 class ContrastiveLoss(torch.nn.Module):
     """
     Contrastive loss function.
@@ -114,3 +87,26 @@ class ContrastiveLoss(torch.nn.Module):
 
         return loss_contrastive
 
+
+
+class GlobalLoss(torch.nn.Module):
+    """
+    Global Loss function
+    Based on: Kumar et. al
+    """
+
+    def __init__(self, margin=1.0, lamda=1.0):
+        super(GlobalLoss, self).__init__()
+        self.margin = margin
+        self.lamda = lamda
+
+    def forward(self, positive_list, negative_list):
+
+        mean_pos = torch.mean(torch.stack(positive_list))
+        mean_neg = torch.mean(torch.stack(negative_list))
+        var_pos = torch.var(torch.stack(positive_list))
+        var_neg = torch.var(torch.stack(negative_list))
+
+        global_loss = (var_pos + var_neg) + self.lamda * torch.clamp(self.margin - (mean_pos - mean_neg), min=0.0)
+
+        return global_loss

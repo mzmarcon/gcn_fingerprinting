@@ -5,8 +5,8 @@ from torch_geometric.data import DataLoader
 from torch.autograd import Variable
 from dataset_loader import ACERTA_condition
 from torch import autograd
-from models import Siamese_GeoChebyConv, GeoSAGEConv, Siamese_GeoSAGEConv
-from utils import ContrastiveLoss
+from models import Siamese_GeoChebyConv, GeoSAGEConv, Siamese_GeoSAGEConv,  Siamese_GlobalCheby
+from utils import ContrastiveLoss, GlobalLoss
 import sys
 from collections import defaultdict
 import torch.nn.functional as F
@@ -20,10 +20,10 @@ if __name__ == '__main__':
     
     checkpoint = 'checkpoints/checkpoint.pth'
     
-    params = { 'model': 'gcn_cheby',
+    params = { 'model': 'gcn_global_cheby',
                'train_batch_size': 1,
                'test_batch_size': 1,
-               'learning_rate': 1e-4,
+               'learning_rate': 2.5e-4,
                'weight_decay': 1e-1,
                'epochs': 120,
                'early_stop': 10,
@@ -41,8 +41,6 @@ if __name__ == '__main__':
 
     nfeat = train_loader.__iter__().__next__()['input_anchor']['x'].shape[1]
     print("NFEAT: ",nfeat)
-
-    criterion = ContrastiveLoss(margin=0.2)
     
     if params['model'] == 'gcn':
         model = GCN(nfeat=nfeat,
@@ -50,71 +48,60 @@ if __name__ == '__main__':
                     nclass=2,
                     dropout=params['dropout'])
 
-    if params['model'] == 'sage':
-        model = Siamese_GeoSAGEConv(nfeat=nfeat,
+    if params['model'] == 'gcn_global_cheby':
+        model = Siamese_GlobalCheby(nfeat=nfeat,
                             nhid=32,
                             nclass=1,
                             dropout=params['dropout'])
 
     if params['model'] == 'gcn_cheby':
         model = Siamese_GeoChebyConv(nfeat=nfeat,
-                                     nhid=16,
+                                     nhid=32,
                                      nclass=1,
                                      dropout=params['dropout'])
     model.to(device)
     
+
+    criterion = GlobalLoss(margin=0.3)
+
+
     optimizer = torch.optim.Adam(model.parameters(), lr=params['learning_rate'],
                                 weight_decay=params['weight_decay'])
 
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-                                             milestones=[30,80,100,450,1000,1500], gamma=0.25)
+                                             milestones=[30,80,100,450,1000,1500], gamma=0.5)
 
 #Training-----------------------------------------------------------------------------
 
     counter=0
-    positive_losses = []
-    negative_losses = []
+
     delta_loss = defaultdict(list)
     accuracy_list = []
     mean_delta_list =[]
-    seen_labels = [] #assure only one example per subject is seen in test
+    global_losses = []
     for e in range(params['epochs']):
         model.train()
-        label_match = torch.FloatTensor([0])
-        label_nomatch = torch.FloatTensor([1])
+        positive_similarities = []
+        negative_similarities = []
         for i, data in enumerate(tqdm(train_loader)):
             input_anchor = data['input_anchor'].to(device)
             input_positive = data['input_positive'].to(device)
             input_negative = data['input_negative'].to(device)
+    
+            #Positive pair:
+            similarity_positive = model(input_anchor,input_positive)
+            positive_similarities.append(similarity_positive)
+            #Negative pair:
+            similarity_negative = model(input_anchor,input_negative)
+            negative_similarities.append(similarity_negative)
 
-            anchor_label = input_anchor['id'][0]
-            if not anchor_label in seen_labels:  #skip subject if already seen
-                seen_labels.append(anchor_label)
-            else: 
-                continue 
+        global_loss = criterion(positive_similarities, negative_similarities)
+        global_losses.append(global_loss.item())
+        optimizer.zero_grad()
+        global_loss.backward()
+        optimizer.step()
 
-            #Match pair:
-            out1, out2 = model(input_anchor,input_positive)
-            label = label_match.to(device)
-
-
-            positive_loss = criterion(out1, out2, label)
-            positive_losses.append(positive_loss.item())
-            optimizer.zero_grad()
-            positive_loss.backward()
-            optimizer.step()
-            
-            #No-match pair:
-            out1, out2 = model(input_anchor,input_negative)
-            label = label_nomatch.to(device)
-
-            negative_loss = criterion(out1, out2, label)
-            negative_losses.append(negative_loss.item())
-            optimizer.zero_grad()
-            negative_loss.backward()
-            optimizer.step()
-
-            counter += 1
+        counter += 1
         lr_scheduler.step()
 
 #Testing-----------------------------------------------------------------------------
@@ -153,8 +140,8 @@ if __name__ == '__main__':
                     input_example_test = data_test_example['input_anchor'].to(device)
 
                     #Get pair similarity:
-                    out1, out2 = model(input_achor_test,input_example_test)
-                    similarity = F.pairwise_distance(out1, out2)
+                    output = model(input_achor_test,input_example_test)
+                    similarity = output
                     similarities[example_test_id].append(similarity)
 
                 mean_similarities = defaultdict(list)  #get mean similaritie for the 20 examples analyzed per subject
@@ -178,8 +165,8 @@ if __name__ == '__main__':
             accuracy = correct/len(predictions)
             accuracy_list.append(accuracy)
 
-            log = 'Epoch: {:03d}, train_+loss: {:.3f}, train_-loss:{:.3f}, test_acc: {:.3f}, mean_delta: {:.4f}, lr: {:.2E}'
-            print(log.format(e+1,positive_loss,negative_loss,accuracy,mean_delta,optimizer.param_groups[0]['lr']))
+            log = 'Epoch: {:03d}, train_loss: {:.3f}, test_acc: {:.3f}, mean_delta: {:.4f}, lr: {:.2E}'
+            print(log.format(e+1,global_loss,accuracy,mean_delta,optimizer.param_groups[0]['lr']))
 
 
 #Plots-----------------------------------------------------------------------------

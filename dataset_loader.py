@@ -9,17 +9,6 @@ import h5py
 from scipy import sparse
 from sklearn.preprocessing import OneHotEncoder
 from collections import defaultdict
-import numpy as np
-import torch
-from torch.utils.data import Dataset
-from torch_geometric.data import Data
-from torchvision import transforms
-from sklearn.model_selection import train_test_split
-from utils import *
-import h5py
-from scipy import sparse
-from sklearn.preprocessing import OneHotEncoder
-from collections import defaultdict
 
 
 class ACERTA_data(Dataset):
@@ -218,8 +207,6 @@ class ACERTA_condition(Dataset):
         common_v1 = self.common_elements(ids_rst_v1,ids_task_v1) 
         common_v2 = self.common_elements(ids_rst_v2,ids_task_v2)
         common_ids = self.common_elements(common_v1,common_v2)
-
-        print('Common len: ',len(common_ids))
 
         enc = OneHotEncoder(handle_unknown='ignore')
         enc_ids = enc.fit_transform(np.array(common_ids).reshape(-1,1)).toarray()
