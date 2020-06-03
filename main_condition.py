@@ -23,7 +23,7 @@ if __name__ == '__main__':
     params = { 'model': 'gcn_cheby',
                'train_batch_size': 1,
                'test_batch_size': 1,
-               'learning_rate': 1e-4,
+               'learning_rate': 5e-4,
                'weight_decay': 1e-1,
                'epochs': 120,
                'early_stop': 10,
@@ -42,7 +42,7 @@ if __name__ == '__main__':
     nfeat = train_loader.__iter__().__next__()['input_anchor']['x'].shape[1]
     print("NFEAT: ",nfeat)
 
-    criterion = ContrastiveLoss(margin=0.2)
+    criterion = ContrastiveLoss(margin=0.4)
     
     if params['model'] == 'gcn':
         model = GCN(nfeat=nfeat,
