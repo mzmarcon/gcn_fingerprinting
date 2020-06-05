@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch_geometric.data import DataLoader
 from torch.autograd import Variable
-from dataset_loader import ACERTA_condition
+from dataset_loader import ACERTA_FP
 from torch import autograd
 from models import Siamese_GeoChebyConv, GeoSAGEConv, Siamese_GeoSAGEConv,  Siamese_GlobalCheby
 from utils import ContrastiveLoss, GlobalLoss
@@ -30,8 +30,8 @@ if __name__ == '__main__':
                'dropout': 0.5,
                'voting_examples': 1}
     
-    training_set = ACERTA_condition(set='training', split=0.8)
-    test_set = ACERTA_condition(set='test', split=0.8)
+    training_set = ACERTA_FP(set='training', split=0.8, type='condition')
+    test_set = ACERTA_FP(set='test', split=0.8, type='condition')
     
     train_loader = DataLoader(training_set, shuffle=True, drop_last=True,
                                 batch_size=params['train_batch_size'])
@@ -61,9 +61,7 @@ if __name__ == '__main__':
                                      dropout=params['dropout'])
     model.to(device)
     
-
     criterion = GlobalLoss(margin=0.3)
-
 
     optimizer = torch.optim.Adam(model.parameters(), lr=params['learning_rate'],
                                 weight_decay=params['weight_decay'])
@@ -74,7 +72,6 @@ if __name__ == '__main__':
 #Training-----------------------------------------------------------------------------
 
     counter=0
-
     delta_loss = defaultdict(list)
     accuracy_list = []
     mean_delta_list =[]
@@ -85,9 +82,13 @@ if __name__ == '__main__':
         negative_similarities = []
         for i, data in enumerate(tqdm(train_loader)):
             input_anchor = data['input_anchor'].to(device)
+
+            _, anchor_visit = data['input_anchor']['id'][0]
+            if anchor_visit == 'visit2': continue  #ensure visit1 to visit2
+
             input_positive = data['input_positive'].to(device)
             input_negative = data['input_negative'].to(device)
-    
+            sys.exit()
             #Positive pair:
             similarity_positive = model(input_anchor,input_positive)
             positive_similarities.append(similarity_positive)
@@ -118,7 +119,7 @@ if __name__ == '__main__':
                 if anchor_test_visit == 'visit2': continue  #ensure visit1 to visit2 test
                 input_achor_test = data_test['input_anchor'].to(device)
 
-                label = anchor_test_id  #see only 5 examples per subject
+                label = anchor_test_id  #test only N examples per subject
                 if not seen_labels.count(label)>=params['voting_examples']:
                     seen_labels.append(label)
                 else: 
@@ -130,13 +131,7 @@ if __name__ == '__main__':
                 for n, data_test_example in enumerate(test_loader): #Compare example to each example in the test set:
                     example_test_id, example_test_visit = data_test_example['input_anchor']['id'][0]
 
-                    # test_label = example_test_id  #see only 5 examples per subject
-                    # if not seen_labels_test.count(test_label)>=5:
-                    #     seen_labels_test.append(test_label)
-                    # else: 
-                    #     continue 
-
-                    if example_test_visit == 'visit1': continue
+                    if example_test_visit == 'visit1': continue #ensure visit1 to visit2 test
                     input_example_test = data_test_example['input_anchor'].to(device)
 
                     #Get pair similarity:
@@ -147,16 +142,15 @@ if __name__ == '__main__':
                 mean_similarities = defaultdict(list)  #get mean similaritie for the 20 examples analyzed per subject
                 for k,v in similarities.items():
                     mean_similarities[k]= torch.mean(torch.stack(v))
-                prediction = min(mean_similarities, key=similarities.get)
-
+                prediction = min(mean_similarities, key=similarities.get) #make prediction
                 predictions[anchor_test_id].append(prediction)
 
-                if len(predictions[anchor_test_id])==params['voting_examples']:
+                if len(predictions[anchor_test_id])==params['voting_examples']: #get most common prediction from voting list
                     voting_prediction = mode(predictions[anchor_test_id])[0][0]                     
                     if voting_prediction == label:
                         correct = correct+1
 
-                    delta = torch.abs(mean_similarities[voting_prediction]-mean_similarities[label])
+                    delta = torch.abs(mean_similarities[voting_prediction]-mean_similarities[label]) #compute delta between prediction and true
                     print("Diff delta: ",delta)
                     delta_loss[i].append(delta)
             

@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch_geometric.data import DataLoader
 from torch.autograd import Variable
-from dataset_loader import ACERTA_data
+from dataset_loader import ACERTA_FP
 from torch import autograd
 from models import Siamese_GeoChebyConv, GeoSAGEConv, Siamese_GeoSAGEConv
 from utils import ContrastiveLoss
@@ -28,8 +28,8 @@ if __name__ == '__main__':
                'early_stop': 10,
                'dropout': 0.5}
     
-    training_set = ACERTA_data(set='training', split=0.8)
-    test_set = ACERTA_data(set='test', split=0.8)
+    training_set = ACERTA_FP(set='training', split=0.8, type='allbetas')
+    test_set = ACERTA_FP(set='test', split=0.8, type='allbetas')
     
     train_loader = DataLoader(training_set, shuffle=True, drop_last=True,
                                 batch_size=params['train_batch_size'])
@@ -37,7 +37,7 @@ if __name__ == '__main__':
                                 batch_size=params['test_batch_size'])
     
 
-    nfeat = train_loader.__iter__().__next__()['input1']['x'].shape[1]
+    nfeat = train_loader.__iter__().__next__()['input_anchor']['x'].shape[1]
     print("NFEAT: ",nfeat)
 
     criterion = ContrastiveLoss(margin=0.2)
@@ -68,6 +68,8 @@ if __name__ == '__main__':
                                              milestones=[60,100,160,250,450,1000,1500], gamma=0.5)
 
 
+#Training-----------------------------------------------------------------------------
+
     counter=0
     match_losses = []
     nomatch_losses = []
@@ -79,12 +81,12 @@ if __name__ == '__main__':
         label_match = torch.FloatTensor([0])
         label_nomatch = torch.FloatTensor([1])
         for i, data in enumerate(tqdm(train_loader)):
-            input_data1 = data['input1'].to(device)
-            input_data_match = data['input_match'].to(device)
-            input_data_nomatch = data['input_nomatch'].to(device)
-
+            input_anchor = data['input_anchor'].to(device)
+            input_positive = data['input_positive'].to(device)
+            input_negative = data['input_negative'].to(device)
+            
             #Match pair:
-            out1, out2 = model(input_data1,input_data_match)
+            out1, out2 = model(input_anchor,input_positive)
             label = label_match.to(device)
 
             match_loss = criterion(out1, out2, label)
@@ -94,7 +96,7 @@ if __name__ == '__main__':
             optimizer.step()
             
             #No-match pair:
-            out1, out2 = model(input_data1,input_data_nomatch)
+            out1, out2 = model(input_anchor,input_negative)
             label = label_nomatch.to(device)
 
             nomatch_loss = criterion(out1, out2, label)
@@ -107,34 +109,36 @@ if __name__ == '__main__':
 
         lr_scheduler.step()
 
+#Testing-----------------------------------------------------------------------------
+
         model.eval()
         correct=0
         similar_list=[]
         seen_labels = [] #assure only one example per subject is seen in test
         with torch.no_grad():
             for i, data in enumerate(test_loader):
-                data1_id, data1_visit = data['input1']['id'][0]
+                anchor_id, anchor_visit = data['input_anchor']['id'][0]
                             
-                if data1_visit == 'visit2': continue #ensure visit1 to visit2 test    
-                input_data1 = data['input1'].to(device)
+                if anchor_visit == 'visit2': continue #ensure visit1 to visit2 test    
+                input_anchor = data['input_anchor'].to(device)
 
-                label = data1_id
-                if not label in seen_labels:
-                    seen_labels.append(label)
+                label = anchor_id   
                 #skip subject if already seen
+                if not label in seen_labels:    
+                    seen_labels.append(label)
                 else: 
                     continue 
                 similarities = defaultdict(list)
 
                 #Compare example to each example in the test set:
                 for n, data_test in enumerate(test_loader):
-                    data_test_id, data_test_visit = data_test['input1']['id'][0]
+                    data_test_id, data_test_visit = data_test['input_anchor']['id'][0]
 
                     if data_test_visit == 'visit1': continue
-                    input_test = data_test['input1'].to(device)
+                    input_test = data_test['input_anchor'].to(device)
 
                     #Get pair similarity:
-                    out1, out2 = model(input_data1,input_test)
+                    out1, out2 = model(input_anchor,input_test)
                     similarity = F.pairwise_distance(out1, out2)
                     similarities[data_test_id].append(similarity)
 
@@ -155,6 +159,9 @@ if __name__ == '__main__':
             log = 'Epoch: {:03d}, train_Tloss: {:.3f}, train_Floss:{:.3f}, test_acc: {:.3f}, mean_delta: {:.4f}, lr: {:.2E}'
             print(log.format(e,match_loss,nomatch_loss,accuracy,mean_delta,optimizer.param_groups[0]['lr']))
     
+
+#Plots-----------------------------------------------------------------------------
+
     plt.plot(range(counter),match_losses, label='Match loss')
     plt.plot(range(counter),nomatch_losses, label='No-match loss')
     plt.title('Match vs No-match Loss') 
