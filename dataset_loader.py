@@ -56,13 +56,13 @@ class ACERTA_FP(Dataset):
 
 
     def __getitem__(self, idx):
+        np.random.seed()
         data_anchor = self.dataset[idx]
 
         #get positive example
         positive_anchor = np.random.choice(data_anchor['matching_idx'])
         data_positive=self.dataset[positive_anchor]
 
-        #TODO np.random choices are the same every epoch because of random seed.
         #get negative example
         while True:
             n_rnd = np.random.randint(len(self.dataset))    
