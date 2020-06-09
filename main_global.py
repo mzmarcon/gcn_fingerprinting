@@ -28,12 +28,19 @@ if __name__ == '__main__':
                'epochs': 120,
                'early_stop': 10,
                'dropout': 0.5,
+               'input_type': 'condition', #if 'condition', input are betas for condition. if 'allbetas', input vector with all betas.
+               'condition': 'irr', #set type of input condition. 'irr', 'pse', 'reg' or 'all'.
+               'adj_threshold': 0.5,
                'voting_examples': 1}
     
-    training_set = ACERTA_FP(set='training', split=0.8, type='condition')
-    test_set = ACERTA_FP(set='test', split=0.8, type='condition')
+
+    training_set = ACERTA_FP(set='training', split=0.8, input_type=params['input_type'],
+                            condition=params['condition'], adj_threshold=params['adj_threshold'])
+
+    test_set = ACERTA_FP(set='test', split=0.8, input_type=params['input_type'],
+                            condition=params['condition'], adj_threshold=params['adj_threshold'])
     
-    train_loader = DataLoader(training_set, shuffle=True, drop_last=True,
+    train_loader = DataLoader(training_set, shuffle=True, drop_last=False,
                                 batch_size=params['train_batch_size'])
     test_loader = DataLoader(test_set, shuffle=False, drop_last=False,
                                 batch_size=params['test_batch_size'])
@@ -75,11 +82,12 @@ if __name__ == '__main__':
     delta_loss = defaultdict(list)
     accuracy_list = []
     mean_delta_list =[]
-    global_losses = []
     for e in range(params['epochs']):
         model.train()
         positive_similarities = []
         negative_similarities = []
+        global_losses = []
+
         for i, data in enumerate(tqdm(train_loader)):
             input_anchor = data['input_anchor'].to(device)
 
@@ -88,7 +96,7 @@ if __name__ == '__main__':
 
             input_positive = data['input_positive'].to(device)
             input_negative = data['input_negative'].to(device)
-            sys.exit()
+
             #Positive pair:
             similarity_positive = model(input_anchor,input_positive)
             positive_similarities.append(similarity_positive)

@@ -11,8 +11,7 @@ from sklearn.preprocessing import OneHotEncoder
 from collections import defaultdict
 
 class ACERTA_FP(Dataset):
-    def __init__(self, set, split=0.8, type='condition'):
-        self.type = type
+    def __init__(self, set, split=0.8, input_type='condition', condition='None', adj_threshold=0.0):
 
         data_path = './'
         rst_data_file = data_path + 'rst_cn_data.hdf5'
@@ -31,6 +30,8 @@ class ACERTA_FP(Dataset):
         common_v2 = self.common_elements(ids_rst_v2,ids_task_v2)
         common_ids = self.common_elements(common_v1,common_v2)
 
+        adj_rst = self.generate_mean_adj(file_rst,common_ids,threshold=adj_threshold)
+
         enc = OneHotEncoder(handle_unknown='ignore')
         enc_ids = enc.fit_transform(np.array(common_ids).reshape(-1,1)).toarray()
 
@@ -41,17 +42,17 @@ class ACERTA_FP(Dataset):
         train_ids, test_ids = self.split_train_test(common_ids,size=split)
 
         if set == 'training':
-            if self.type == 'condition':
-                self.dataset = self.process_betas_condition_dataset(file_rst,file_task,train_ids,labels_dict)
-            if self.type == 'allbetas':
-                self.dataset = self.process_betas_dataset(file_rst,file_task,train_ids,labels_dict)
+            if input_type == 'condition':
+                self.dataset = self.process_betas_condition_dataset(file_rst,file_task,train_ids,labels_dict,adj_rst,condition)
+            if input_type == 'allbetas':
+                self.dataset = self.process_betas_dataset(file_rst,file_task,train_ids,labels_dict,adj_rst)
 
 
         if set == 'test':
-            if self.type == 'condition':
-                self.dataset = self.process_betas_condition_dataset(file_rst,file_task,test_ids,labels_dict)
-            if self.type == 'allbetas':
-                self.dataset = self.process_betas_dataset(file_rst,file_task,test_ids,labels_dict)
+            if input_type == 'condition':
+                self.dataset = self.process_betas_condition_dataset(file_rst,file_task,test_ids,labels_dict,adj_rst,condition)
+            if input_type == 'allbetas':
+                self.dataset = self.process_betas_dataset(file_rst,file_task,test_ids,labels_dict,adj_rst)
 
 
     def __getitem__(self, idx):
@@ -61,9 +62,10 @@ class ACERTA_FP(Dataset):
         positive_anchor = np.random.choice(data_anchor['matching_idx'])
         data_positive=self.dataset[positive_anchor]
 
+        #TODO np.random choices are the same every epoch because of random seed.
         #get negative example
         while True:
-            n_rnd = np.random.randint(len(self.dataset))
+            n_rnd = np.random.randint(len(self.dataset))    
             if not n_rnd in [idx] + data_anchor['matching_idx']:
                 data_negative = self.dataset[n_rnd]
                 break
@@ -100,9 +102,8 @@ class ACERTA_FP(Dataset):
         return train, test
 
 
-    def process_betas_dataset(self,file_rst,file_task,ids,labels_dict):
+    def process_betas_dataset(self,file_rst,file_task,ids,labels_dict,adj_rst):
         dataset = []
-        adj_rst = self.generate_mean_adj(file_rst,ids)
 
         for visit in ['visit1','visit2']:
             for id in ids:
@@ -126,15 +127,27 @@ class ACERTA_FP(Dataset):
         
         return dataset
 
-    def process_betas_condition_dataset(self,file_rst,file_task,ids,labels_dict):
+    def process_betas_condition_dataset(self,file_rst,file_task,ids,labels_dict,adj_rst,condition):
         dataset = []
-        adj_rst = self.generate_mean_adj(file_rst,ids)
+
+        if condition == 'irr':
+            range_start = 0
+            range_stop = 20
+        elif condition == 'pse':
+            range_start = 20
+            range_stop = 40
+        elif condition == 'reg':
+            range_start = 40
+            range_stop = 60
+        else:
+            range_start=0
+            range_stop=60
 
         for visit in ['visit1','visit2']:
             for id in ids:
                 features = file_task[visit][id]['betas_rois'][:]
 
-                for n in range(20):
+                for n in range(range_start,range_stop):
                     feature = []
                     for item in features:
                         feature.append(item[n])
@@ -159,9 +172,8 @@ class ACERTA_FP(Dataset):
 
         return dataset
 
-    def process_dataset_regular(self,file_rst,file_task,ids,labels_dict):
+    def process_dataset_regular(self,file_rst,file_task,ids,labels_dict,adj_rst):
         dataset = []
-        adj_rst = self.generate_mean_adj(file_rst,ids)
 
         for visit in ['visit1','visit2']:
             for id in ids:
@@ -180,7 +192,7 @@ class ACERTA_FP(Dataset):
                 })
         return dataset
 
-    def generate_mean_adj(self,file_rst,ids):
+    def generate_mean_adj(self,file_rst,ids,threshold):
         cn_matrix_list = []
         for visit in ['visit1','visit2']:
             for id in ids:
@@ -189,7 +201,7 @@ class ACERTA_FP(Dataset):
         
         cn_matrix = np.mean(cn_matrix_list,axis=0)
 
-        mask_rst, _ = get_adjacency(cn_matrix,0.5)
+        mask_rst, _ = get_adjacency(cn_matrix,threshold)
         adj_rst = sparse.coo_matrix(mask_rst)
         adj_rst = torch.sparse_coo_tensor(torch.LongTensor(np.vstack((adj_rst.row, adj_rst.col))),
                                             torch.FloatTensor(adj_rst.data),

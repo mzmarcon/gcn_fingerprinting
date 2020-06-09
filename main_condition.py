@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch_geometric.data import DataLoader
 from torch.autograd import Variable
-from dataset_loader import ACERTA_condition
+from dataset_loader import ACERTA_FP
 from torch import autograd
 from models import Siamese_GeoChebyConv, GeoSAGEConv, Siamese_GeoSAGEConv
 from utils import ContrastiveLoss
@@ -25,16 +25,24 @@ if __name__ == '__main__':
                'test_batch_size': 1,
                'learning_rate': 5e-4,
                'weight_decay': 1e-1,
-               'epochs': 120,
+               'epochs': 250,
                'early_stop': 10,
                'dropout': 0.5,
+               'input_type': 'condition', #if 'condition', input are betas for condition. if 'allbetas', input vector with all betas.
+               'condition': 'irr', #set type of input condition. 'irr', 'pse', 'reg' or 'all'.
+               'adj_threshold': 0.5,
                'voting_examples': 1}
-    
-    training_set = ACERTA_condition(set='training', split=0.8)
-    test_set = ACERTA_condition(set='test', split=0.8)
+
+
+    training_set = ACERTA_FP(set='training', split=0.8, input_type=params['input_type'],
+                            condition=params['condition'], adj_threshold=params['adj_threshold'])
+
+    test_set = ACERTA_FP(set='test', split=0.8, input_type=params['input_type'],
+                            condition=params['condition'], adj_threshold=params['adj_threshold'])
     
     train_loader = DataLoader(training_set, shuffle=True, drop_last=True,
                                 batch_size=params['train_batch_size'])
+
     test_loader = DataLoader(test_set, shuffle=False, drop_last=False,
                                 batch_size=params['test_batch_size'])
     
@@ -42,7 +50,7 @@ if __name__ == '__main__':
     nfeat = train_loader.__iter__().__next__()['input_anchor']['x'].shape[1]
     print("NFEAT: ",nfeat)
 
-    criterion = ContrastiveLoss(margin=0.4)
+    criterion = ContrastiveLoss(margin=0.8)
     
     if params['model'] == 'gcn':
         model = GCN(nfeat=nfeat,
@@ -67,7 +75,7 @@ if __name__ == '__main__':
                                 weight_decay=params['weight_decay'])
 
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-                                             milestones=[30,80,100,450,1000,1500], gamma=0.25)
+                                             milestones=[30,80,150,200,450,1000,1500], gamma=0.25)
 
 #Training-----------------------------------------------------------------------------
 
@@ -96,7 +104,6 @@ if __name__ == '__main__':
             #Match pair:
             out1, out2 = model(input_anchor,input_positive)
             label = label_match.to(device)
-
 
             positive_loss = criterion(out1, out2, label)
             positive_losses.append(positive_loss.item())
