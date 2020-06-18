@@ -95,7 +95,7 @@ if __name__ == '__main__':
     
     mask_path = data_path + 'Masks/HaskinsPeds_NL_template_3x3x3_maskRESAMPLED.nii'
     atlas_path = data_path + 'Masks/HaskinsPeds_NL_atlasRESAMPLED1.0.nii'
-    cc200_path = data_path + 'Masks/rm_group_mean_tcorr_cluster_200.nii.gz'
+    cc200_path = data_path + 'Masks/shen_1mm_268_resampled.nii.gz'
 
     cc200_coords = plotting.find_parcellation_cut_coords(labels_img=cc200_path)                      
 

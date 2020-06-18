@@ -52,7 +52,7 @@ if __name__ == '__main__':
     v1_folders = glob(v1_path + 'betas*')
     v2_folders = glob(v2_path + '*')
 
-    cc200_path = '/home/marcon/datasets/acerta_data/Masks/rm_group_mean_tcorr_cluster_200.nii.gz'
+    cc200_path = '/home/marcon/datasets/acerta_data/Masks/shen_1mm_268_resampled.nii.gz'
     cc200_coords = plotting.find_parcellation_cut_coords(labels_img=cc200_path)
 
     hf = h5py.File('betas_new_data.hdf5', 'w') 
