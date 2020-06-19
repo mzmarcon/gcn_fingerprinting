@@ -25,13 +25,13 @@ if __name__ == '__main__':
                'test_batch_size': 1,
                'learning_rate': 5e-4,
                'weight_decay': 1e-1,
-               'epochs': 250,
+               'epochs': 200,
                'early_stop': 10,
                'dropout': 0.5,
                'loss_margin': 0.5,
                'input_type': 'condition', #if 'condition', input are betas for condition. if 'allbetas', input vector with all betas.
-               'condition': 'irr', #set type of input condition. 'irr', 'pse', 'reg' or 'all'.
-               'adj_threshold': 0.8,
+               'condition': 'pse', #set type of input condition. 'irr', 'pse', 'reg' or 'all'.
+               'adj_threshold': 0.5,
                'voting_examples': 1}
 
 
@@ -76,41 +76,35 @@ if __name__ == '__main__':
                                 weight_decay=params['weight_decay'])
 
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-                                             milestones=[30,80,150,200,450,1000,1500], gamma=0.25)
+                                             milestones=[20,40,60,100,150,450,1000,1500], gamma=0.25)
 
 #Training-----------------------------------------------------------------------------
 
-    counter=0
     delta_loss = defaultdict(list)
     accuracy_list = []
+    training_losses = []
+    counter=0   
     mean_delta_list =[]
-    seen_labels = [] #assure only one example per subject is seen in test
+
     for e in range(params['epochs']):
         model.train()
-        training_losses = []
-        label_match = torch.FloatTensor([0])
-        label_nomatch = torch.FloatTensor([1])
+        epoch_loss = []
         for i, data in enumerate(tqdm(train_loader)):
             input_anchor = data['input_anchor'].to(device)
             input_pair = data['input_pair'].to(device)
             label = data['label'].to(device)
 
-            # anchor_label = input_anchor['id'][0]
-            # if not anchor_label in seen_labels:  #skip subject if already seen
-            #     seen_labels.append(anchor_label)
-            # else: 
-            #     continue 
-
             #Match pair:
             out1, out2 = model(input_anchor,input_pair)
 
             training_loss = criterion(out1, out2, label)
-            training_losses.append(training_loss.item())
+            epoch_loss.append(training_loss.item())
             optimizer.zero_grad()
             training_loss.backward()
             optimizer.step()
 
-            counter += 1
+        counter += 1
+        training_losses.append(epoch_loss)
         lr_scheduler.step()
 
 #Testing-----------------------------------------------------------------------------
@@ -118,6 +112,7 @@ if __name__ == '__main__':
         correct=0
         seen_labels = [] #assure only one example per subject is seen in test
         predictions = defaultdict(list)
+        examples = 0
 
         with torch.no_grad():
             for i, data_test in enumerate(test_loader):
@@ -138,29 +133,31 @@ if __name__ == '__main__':
                 if disimilarity_positive < disimilarity_negative:
                     correct += 1
 
+                examples += 1
+
                 delta = disimilarity_negative - disimilarity_positive
-                # print("Diff delta: ",delta)
                 delta_loss[i].append(delta)
             
             mean_delta = torch.mean(torch.tensor([v[-1] for (k,v) in delta_loss.items()]))
             mean_delta_list.append(mean_delta)
-            accuracy = correct/len(test_loader)
+            accuracy = correct/examples
             accuracy_list.append(accuracy)
 
             log = 'Epoch: {:03d}, train_+loss: {:.3f}, test_acc: {:.3f}, mean_delta: {:.4f}, lr: {:.2E}'
-            print(log.format(e+1,np.mean(training_losses),accuracy,mean_delta,optimizer.param_groups[0]['lr']))
+            print(log.format(e+1,np.mean(epoch_loss),accuracy,mean_delta,optimizer.param_groups[0]['lr']))
+
+    # np.savez('outfile.npz', loss=training_losses,counter=counter, accuracy=accuracy_list, delta=mean_delta_list)
+    # torch.save(model.state_dict(), checkpoint)
 
 #Plots-----------------------------------------------------------------------------
 
-    plt.plot(range(counter),positive_losses, label='Positive loss')
-    plt.plot(range(counter),negative_losses, label='Negative loss')
-    plt.title('Positive vs Negative Loss') 
+    plt.plot(range(counter),np.mean(training_losses,axis=1), label='Training loss')
+    plt.title('Training Loss') 
     plt.xlabel('Iterations')
     plt.ylabel('Loss')
     plt.legend()
     plt.show()
 
-    np.savez('outfile.npz', positive=positive_losses, negative=negative_losses, counter=counter, accuracy=accuracy_list, delta=mean_delta_list)
 
     for key in [k for (k,v) in delta_loss.items()]:
         plt.plot(delta_loss[key])
@@ -183,4 +180,3 @@ if __name__ == '__main__':
     plt.grid()
     plt.show()
 
-    # torch.save(model.state_dict(), checkpoint)

@@ -65,7 +65,7 @@ class Siamese_GlobalCheby(nn.Module):
         self.dropout = dropout
 
         self.classifier = nn.Sequential(
-            nn.Linear(200, 100),
+            nn.Linear(268, 100),
             nn.ReLU(),
             nn.Dropout(),
             nn.Linear(100, 60),

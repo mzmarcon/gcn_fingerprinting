@@ -26,12 +26,12 @@ if __name__ == '__main__':
                'test_batch_size': 1,
                'learning_rate': 1e-3,
                'weight_decay': 1e-1,
-               'epochs': 250,
+               'epochs': 200,
                'early_stop': 10,
                'dropout': 0.5,
                'loss_margin': 0.2,
                'input_type': 'condition', #if 'condition', input are betas for condition. if 'allbetas', input vector with all betas.
-               'condition': 'irr', #set type of input condition. 'irr', 'pse', 'reg' or 'all'.
+               'condition': 'all', #set type of input condition. 'irr', 'pse', 'reg' or 'all'.
                'adj_threshold': 0.5,
                'voting_examples': 1}
 
@@ -88,10 +88,10 @@ if __name__ == '__main__':
     delta_loss = defaultdict(list)
     accuracy_list = []
     mean_delta_list =[]
-    seen_labels = [] #assure only one example per subject is seen in test
+
     for e in range(params['epochs']):
         model.train()
-
+        epoch_loss = []
         for i, data in enumerate(tqdm(train_loader)):
             input_anchor = data['input_anchor'].to(device)
             input_pair = data['input_pair'].to(device)
@@ -101,12 +101,13 @@ if __name__ == '__main__':
             output = model(input_anchor,input_pair)
 
             training_loss = criterion(output, label.float())
-            training_losses.append(training_loss.item())
+            epoch_loss.append(training_loss.item())
             optimizer.zero_grad()
             training_loss.backward()
             optimizer.step()
 
-            counter += 1
+        counter += 1
+        training_losses.append(epoch_loss)
         # lr_scheduler.step()
 
 #Testing-----------------------------------------------------------------------------
@@ -145,24 +146,17 @@ if __name__ == '__main__':
             log = 'Epoch: {:03d}, train_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
             print(log.format(e+1,np.mean(training_losses),accuracy,optimizer.param_groups[0]['lr']))
 
+    np.savez('outfile.npz', loss=training_losses, counter=counter, accuracy=accuracy_list, delta=mean_delta_list)
+
+    # torch.save(model.state_dict(), checkpoint)
 
 #Plots-----------------------------------------------------------------------------
 
-    plt.plot(range(counter),positive_losses, label='Positive loss')
-    plt.plot(range(counter),negative_losses, label='Negative loss')
-    plt.title('Positive vs Negative Loss') 
+    plt.plot(range(counter),np.mean(training_losses,axis=1), label='Training loss')
+    plt.title('Training Loss') 
     plt.xlabel('Iterations')
     plt.ylabel('Loss')
     plt.legend()
-    plt.show()
-
-    np.savez('outfile.npz', positive=positive_losses, negative=negative_losses, counter=counter, accuracy=accuracy_list, delta=mean_delta_list)
-
-    for key in [k for (k,v) in delta_loss.items()]:
-        plt.plot(delta_loss[key])
-        plt.title('Similarity Delta Prediction vs True Label')
-        plt.xlabel('Iterations')
-        plt.ylabel('Similarity difference')
     plt.show()
 
     plt.plot(range(e+1),accuracy_list)
@@ -172,11 +166,3 @@ if __name__ == '__main__':
     plt.grid()
     plt.show()
 
-    plt.plot(range(e+1),mean_delta_list)
-    plt.title('Mean delta per epoch') 
-    plt.xlabel('Epoch')
-    plt.ylabel('Mean delta')
-    plt.grid()
-    plt.show()
-
-    # torch.save(model.state_dict(), checkpoint)

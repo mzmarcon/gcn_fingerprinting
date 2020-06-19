@@ -13,7 +13,7 @@ from collections import defaultdict
 class ACERTA_FP(Dataset):
     def __init__(self, set, split=0.8, input_type='condition', condition='None', adj_threshold=0.0):
 
-        data_path = './'
+        data_path = 'data/'
         rst_data_file = data_path + 'rst_cn_data.hdf5'
         # task_data_file = data_path + 'task_data.hdf5'
         task_data_file = data_path + 'betas_data.hdf5'
@@ -224,7 +224,7 @@ class ACERTA_reading(Dataset):
     def __init__(self, set, split=0.8, input_type='condition', condition='None', adj_threshold=0.0):
         self.split = split
 
-        data_path = './'
+        data_path = 'data/'
         rst_data_file = data_path + 'rst_cn_data.hdf5'
         # task_data_file = data_path + 'task_data.hdf5'
         task_data_file = data_path + 'betas_data.hdf5'
