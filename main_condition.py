@@ -98,7 +98,7 @@ if __name__ == '__main__':
             #Match pair:
             out1, out2 = model(input_anchor,input_pair)
 
-            training_loss = criterion(out1[0], out2[0], label[0])
+            training_loss = criterion(out1, out2, label)
             epoch_loss.append(training_loss.item())
             optimizer.zero_grad()
             training_loss.backward()
