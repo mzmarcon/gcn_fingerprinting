@@ -11,12 +11,14 @@ from sklearn.preprocessing import OneHotEncoder
 from collections import defaultdict
 
 class ACERTA_FP(Dataset):
-    def __init__(self, set, split=0.8, input_type='condition', condition='None', adj_threshold=0.0):
+    def __init__(self, set_split, split=0.8, input_type='condition', condition='None', adj_threshold=0.0):
+        self.set = set_split
 
         data_path = 'data/'
         rst_data_file = data_path + 'rst_cn_data.hdf5'
         # task_data_file = data_path + 'task_data.hdf5'
         task_data_file = data_path + 'betas_data.hdf5'
+
                 
         file_rst = h5py.File(rst_data_file, 'r')
         file_task = h5py.File(task_data_file, 'r')
@@ -41,14 +43,14 @@ class ACERTA_FP(Dataset):
 
         train_ids, test_ids = self.split_train_test(common_ids,size=split)
 
-        if set == 'training':
+        if self.set == 'training':
             if input_type == 'condition':
                 self.dataset = self.process_betas_condition_dataset(file_rst,file_task,train_ids,labels_dict,adj_rst,condition)
             if input_type == 'allbetas':
                 self.dataset = self.process_betas_dataset(file_rst,file_task,train_ids,labels_dict,adj_rst)
 
 
-        if set == 'test':
+        if self.set == 'test':
             if input_type == 'condition':
                 self.dataset = self.process_betas_condition_dataset(file_rst,file_task,test_ids,labels_dict,adj_rst,condition)
             if input_type == 'allbetas':
@@ -56,9 +58,13 @@ class ACERTA_FP(Dataset):
 
 
     def __getitem__(self, idx):
-        np.random.seed()
-        data_anchor = self.dataset[idx]
 
+        if self.set == 'training':
+            np.random.seed()
+        else:
+            np.random.seed(42)
+
+        data_anchor = self.dataset[idx]
         positive_anchor = np.random.choice(data_anchor['matching_idx'])
         data_positive=self.dataset[positive_anchor]
 
@@ -221,8 +227,9 @@ class ACERTA_FP(Dataset):
 
 
 class ACERTA_reading(Dataset):
-    def __init__(self, set, split=0.8, input_type='condition', condition='None', adj_threshold=0.0):
+    def __init__(self, set_split, split=0.8, input_type='condition', condition='None', adj_threshold=0.0):
         self.split = split
+        self.set = set_split
 
         data_path = 'data/'
         rst_data_file = data_path + 'rst_cn_data.hdf5'
@@ -242,17 +249,22 @@ class ACERTA_reading(Dataset):
 
         adj_rst = self.generate_mean_adj(file_rst,ids_v1,ids_v2,threshold=adj_threshold)
 
-        if set == 'training':
+        if self.set == 'training':
             if input_type == 'condition':
                 self.dataset = self.process_betas_condition_reading_dataset(file_rst,file_task,sub_list,train_ids,train_labels,adj_rst,condition)
 
-        if set == 'test':
+        if self.set == 'test':
             if input_type == 'condition':
                 self.dataset = self.process_betas_condition_reading_dataset(file_rst,file_task,sub_list,test_ids,test_labels,adj_rst,condition)
 
 
     def __getitem__(self, idx):
-        np.random.seed()
+
+        if self.set == 'training':
+            np.random.seed()
+        else:
+            np.random.seed(42)
+            
         data_anchor = self.dataset[idx]
         anchor_label = data_anchor['graph']['label']
         anchor_id = data_anchor['graph']['id']

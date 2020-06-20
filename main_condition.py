@@ -24,7 +24,7 @@ if __name__ == '__main__':
     params = { 'model': 'gcn_cheby_bce',
                'train_batch_size': 8,
                'test_batch_size': 1,
-               'learning_rate': 1e-4,
+               'learning_rate': 1e-5,
                'weight_decay': 1e-1,
                'epochs': 200,
                'early_stop': 10,
@@ -32,14 +32,13 @@ if __name__ == '__main__':
                'loss_margin': 0.2,
                'input_type': 'condition', #if 'condition', input are betas for condition. if 'allbetas', input vector with all betas.
                'condition': 'irr', #set type of input condition. 'irr', 'pse', 'reg' or 'all'.
-               'adj_threshold': 0.5,
-               'voting_examples': 1}
+               'adj_threshold': 0.8}
 
 
-    training_set = ACERTA_FP(set='training', split=0.8, input_type=params['input_type'],
+    training_set = ACERTA_FP(set_split='training', split=0.8, input_type=params['input_type'],
                             condition=params['condition'], adj_threshold=params['adj_threshold'])
 
-    test_set = ACERTA_FP(set='test', split=0.8, input_type=params['input_type'],
+    test_set = ACERTA_FP(set_split='test', split=0.8, input_type=params['input_type'],
                             condition=params['condition'], adj_threshold=params['adj_threshold'])
     
     train_loader = DataLoader(training_set, shuffle=True, drop_last=True,

@@ -22,11 +22,11 @@ if __name__ == '__main__':
     checkpoint = 'checkpoints/checkpoint.pth'
     
     params = { 'model': 'gcn_cheby',
-               'train_batch_size': 1,
+               'train_batch_size': 8,
                'test_batch_size': 1,
                'learning_rate': 1e-5,
                'weight_decay': 1e-1,
-               'epochs': 200,
+               'epochs': 40,
                'early_stop': 10,
                'dropout': 0.5,
                'loss_margin': 0.2,
@@ -36,16 +36,16 @@ if __name__ == '__main__':
                'voting_examples': 1}
 
 
-    training_set = ACERTA_reading(set='training', split=0.8, input_type=params['input_type'],
+    training_set = ACERTA_reading(set_split='training', split=0.8, input_type=params['input_type'],
                             condition=params['condition'], adj_threshold=params['adj_threshold'])
 
-    test_set = ACERTA_reading(set='test', split=0.8, input_type=params['input_type'],
+    test_set = ACERTA_reading(set_split='test', split=0.8, input_type=params['input_type'],
                             condition=params['condition'], adj_threshold=params['adj_threshold'])
     
     train_loader = DataLoader(training_set, shuffle=True, drop_last=True,
                                 batch_size=params['train_batch_size'])
 
-    test_loader = DataLoader(test_set, shuffle=True, drop_last=False,
+    test_loader = DataLoader(test_set, shuffle=False, drop_last=False,
                                 batch_size=params['test_batch_size'])
     
 
@@ -79,7 +79,7 @@ if __name__ == '__main__':
                                 weight_decay=params['weight_decay'])
 
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-                                             milestones=[80,150,200,450,1000,1500], gamma=0.5)
+                                             milestones=[20,150,200,450,1000,1500], gamma=0.5)
 
 #Training-----------------------------------------------------------------------------
 
