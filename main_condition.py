@@ -21,16 +21,16 @@ if __name__ == '__main__':
     checkpoint = 'checkpoints/checkpoint.pth'
     
     params = { 'model': 'gcn_cheby',
-               'train_batch_size': 8,
+               'train_batch_size': 16,
                'test_batch_size': 1,
-               'learning_rate': 5e-4,
+               'learning_rate': 1e-4,
                'weight_decay': 1e-1,
                'epochs': 200,
                'early_stop': 10,
                'dropout': 0.5,
                'loss_margin': 0.5,
                'input_type': 'condition', #if 'condition', input are betas for condition. if 'allbetas', input vector with all betas.
-               'condition': 'pse', #set type of input condition. 'irr', 'pse', 'reg' or 'all'.
+               'condition': 'irr', #set type of input condition. 'irr', 'pse', 'reg' or 'all'.
                'adj_threshold': 0.5,
                'voting_examples': 1}
 
@@ -111,9 +111,9 @@ if __name__ == '__main__':
 #Testing-----------------------------------------------------------------------------
         model.eval()
         correct=0
+        examples = 0
         seen_labels = [] #assure only one example per subject is seen in test
         predictions = defaultdict(list)
-        examples = 0
 
         with torch.no_grad():
             for i, data_test in enumerate(test_loader):
@@ -128,7 +128,7 @@ if __name__ == '__main__':
                 out1_pos, out2_pos = model(input_achor_test,input_positive_test)
                 disimilarity_positive = F.pairwise_distance(out1_pos, out2_pos)
                 
-                out1_neg, out2_neg = model(input_anchor,input_negative_test)
+                out1_neg, out2_neg = model(input_achor_test,input_negative_test)
                 disimilarity_negative = F.pairwise_distance(out1_neg, out2_neg)
 
                 if disimilarity_positive < disimilarity_negative:

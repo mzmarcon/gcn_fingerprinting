@@ -23,9 +23,9 @@ class Siamese_GeoChebyConv(nn.Module):
             nn.ReLU(),
             nn.Dropout(),
             nn.Linear(100, 60),
-            # nn.ReLU(),
-            # nn.Dropout(),
-            # nn.Linear(60, 1),
+            nn.ReLU(),
+            nn.Dropout(),
+            nn.Linear(60, 1),
             # nn.Sigmoid()
         )
 
@@ -37,7 +37,6 @@ class Siamese_GeoChebyConv(nn.Module):
         # x = F.relu(self.gc3(x, edge_index=data['edge_index'], edge_weight=data['edge_attr']))
         # x = F.dropout(x, self.dropout, training=self.training)
         x = F.relu(self.gc4(x, edge_index=data['edge_index'], edge_weight=data['edge_attr']))
-        # return F.log_softmax(x, dim=1)
         return x
 
     def forward(self, data1, data2):
