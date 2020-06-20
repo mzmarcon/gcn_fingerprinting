@@ -21,7 +21,7 @@ if __name__ == '__main__':
     checkpoint = 'checkpoints/checkpoint.pth'
     
     params = { 'model': 'gcn_cheby',
-               'train_batch_size': 1,
+               'train_batch_size': 8,
                'test_batch_size': 1,
                'learning_rate': 5e-4,
                'weight_decay': 1e-1,
@@ -93,11 +93,12 @@ if __name__ == '__main__':
             input_anchor = data['input_anchor'].to(device)
             input_pair = data['input_pair'].to(device)
             label = data['label'].to(device)
+            label = torch.split(label,input_anchor.num_graphs)
 
             #Match pair:
             out1, out2 = model(input_anchor,input_pair)
 
-            training_loss = criterion(out1, out2, label)
+            training_loss = criterion(out1[0], out2[0], label[0])
             epoch_loss.append(training_loss.item())
             optimizer.zero_grad()
             training_loss.backward()

@@ -24,14 +24,14 @@ if __name__ == '__main__':
     params = { 'model': 'gcn_cheby',
                'train_batch_size': 1,
                'test_batch_size': 1,
-               'learning_rate': 1e-3,
+               'learning_rate': 1e-5,
                'weight_decay': 1e-1,
                'epochs': 200,
                'early_stop': 10,
                'dropout': 0.5,
                'loss_margin': 0.2,
                'input_type': 'condition', #if 'condition', input are betas for condition. if 'allbetas', input vector with all betas.
-               'condition': 'all', #set type of input condition. 'irr', 'pse', 'reg' or 'all'.
+               'condition': 'irr', #set type of input condition. 'irr', 'pse', 'reg' or 'all'.
                'adj_threshold': 0.5,
                'voting_examples': 1}
 
@@ -95,10 +95,10 @@ if __name__ == '__main__':
         for i, data in enumerate(tqdm(train_loader)):
             input_anchor = data['input_anchor'].to(device)
             input_pair = data['input_pair'].to(device)
-            label = data['label'].to(device)
+            label = data['label'].unsqueeze(1).to(device)
             
             #Match pair:
-            output = model(input_anchor,input_pair)
+            output = model(input_anchor,input_pair).to(device)
 
             training_loss = criterion(output, label.float())
             epoch_loss.append(training_loss.item())

@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import ChebConv, SAGEConv
 from utils import ContrastiveLoss
 from torch_geometric.data import Data
+from torch_geometric.utils import to_dense_batch 
 
 class Siamese_GeoChebyConv(nn.Module):
     def __init__(self, nfeat, nhid, nclass, dropout):
@@ -40,16 +41,28 @@ class Siamese_GeoChebyConv(nn.Module):
         return x
 
     def forward(self, data1, data2):
-        out1 = self.forward_single(data1)
-        out2 = self.forward_single(data2)
+        data1_graphs = data1.to_data_list()
+        data2_graphs = data2.to_data_list()
 
-        out1 = self.classifier(out1.T)
-        out2 = self.classifier(out2.T)
-        # dis = torch.abs(out1 - out2)
-        # out = nn.Linear(dis)
-        # return F.log_softmax(x, dim=1)
-        return out1, out2
+        outs1 = []
+        outs2 = []
+        for graph_num in range(data1.num_graphs):
+            input1 = data1_graphs[graph_num]
+            input2 = data2_graphs[graph_num]
+            
+            conv_out1 = self.forward_single(input1)
+            conv_out2 = self.forward_single(input2)
 
+            dense_out1 = self.classifier(conv_out1.T)
+            dense_out2 = self.classifier(conv_out2.T)
+
+            outs1.append(dense_out1)
+            outs2.append(dense_out2)
+
+        output1 = torch.stack(outs1,dim=0)
+        output2 = torch.stack(outs2,dim=0)
+
+        return output1, output2
 
 
 class Siamese_GlobalCheby(nn.Module):
@@ -128,15 +141,46 @@ class Siamese_GeoChebyConv_Read(nn.Module):
         return x
 
     def forward(self, data1, data2):
-        out1 = self.forward_single(data1)
-        out2 = self.forward_single(data2)
+        outs = []
+        data1_graphs = data1.to_data_list()
+        data2_graphs = data2.to_data_list()
 
-        l1_distance =  nn.PairwiseDistance(p=1.0)
-        output = l1_distance(out1, out2)
-        output = self.classifier(output.T)
-        
+        for graph_num in range(data1.num_graphs):
+            input1 = data1_graphs[graph_num]
+            input2 = data2_graphs[graph_num]
+            
+            conv_out1 = self.forward_single(input1)
+            conv_out2 = self.forward_single(input2)
+
+            l1_distance =  nn.PairwiseDistance(p=1.0)
+            distance_out = l1_distance(conv_out1, conv_out2)
+            dense_out = self.classifier(distance_out.T)
+            outs.append(dense_out)
+
+        output = torch.stack(outs,dim=0)
+
         return output
+        
+    # def forward(self, data1, data2):
+    #     outs = []
+    #     data1_dense = to_dense_batch(data1['x'],data1.batch)[0]
+    #     data2_dense = to_dense_batch(data2['x'],data2.batch)[0]
 
+    #     for graph_num in range(data1.num_graphs):
+    #         input1 = data1_dense[graph_num].squeeze(0)
+    #         input2 = data2_dense[graph_num].squeeze(0)
+            
+    #         conv_out1 = self.forward_single(input1,data1)
+    #         conv_out2 = self.forward_single(input2,data2)
+
+    #         l1_distance =  nn.PairwiseDistance(p=1.0)
+    #         distance_out = l1_distance(conv_out1, conv_out2)
+    #         dense_out = self.classifier(distance_out.T)
+    #         outs.append(dense_out)
+
+    #     output = torch.stack(outs,dim=0)
+
+    #     return output
 
 class Siamese_HingeCheby(nn.Module):
     def __init__(self, nfeat, nhid, nclass, dropout):
