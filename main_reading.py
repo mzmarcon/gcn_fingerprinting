@@ -19,14 +19,15 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Device:',device)
     
-    checkpoint = 'checkpoints/checkpoint.pth'
-    
+    checkpoint = 'checkpoints/'
+    classification = 'reading'
+
     params = { 'model': 'gcn_cheby',
                'train_batch_size': 8,
                'test_batch_size': 1,
                'learning_rate': 1e-5,
                'weight_decay': 1e-1,
-               'epochs': 40,
+               'epochs': 5,
                'early_stop': 10,
                'dropout': 0.5,
                'loss_margin': 0.2,
@@ -146,9 +147,9 @@ if __name__ == '__main__':
             log = 'Epoch: {:03d}, train_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
             print(log.format(e+1,np.mean(training_losses),accuracy,optimizer.param_groups[0]['lr']))
 
-    np.savez('outfile.npz', loss=training_losses, counter=counter, accuracy=accuracy_list, delta=mean_delta_list)
+    # np.savez('outfile.npz', loss=training_losses, counter=counter, accuracy=accuracy_list, delta=mean_delta_list)
 
-    # torch.save(model.state_dict(), checkpoint)
+    torch.save(model.state_dict(), f"{checkpoint}chk_{classification}_{accuracy:.3f}.pth")
 
 #Plots-----------------------------------------------------------------------------
 
