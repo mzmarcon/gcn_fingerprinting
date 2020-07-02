@@ -22,5 +22,10 @@ sdist/
 var/
 *.egg-info/
 
+# Test files
+test*
+
 # Misc
 *.txt
+data/
+checkpoints/

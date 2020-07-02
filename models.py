@@ -160,26 +160,6 @@ class Siamese_GeoChebyConv_Read(nn.Module):
 
         return output
         
-    # def forward(self, data1, data2):
-    #     outs = []
-    #     data1_dense = to_dense_batch(data1['x'],data1.batch)[0]
-    #     data2_dense = to_dense_batch(data2['x'],data2.batch)[0]
-
-    #     for graph_num in range(data1.num_graphs):
-    #         input1 = data1_dense[graph_num].squeeze(0)
-    #         input2 = data2_dense[graph_num].squeeze(0)
-            
-    #         conv_out1 = self.forward_single(input1,data1)
-    #         conv_out2 = self.forward_single(input2,data2)
-
-    #         l1_distance =  nn.PairwiseDistance(p=1.0)
-    #         distance_out = l1_distance(conv_out1, conv_out2)
-    #         dense_out = self.classifier(distance_out.T)
-    #         outs.append(dense_out)
-
-    #     output = torch.stack(outs,dim=0)
-
-    #     return output
 
 class Siamese_HingeCheby(nn.Module):
     def __init__(self, nfeat, nhid, nclass, dropout):

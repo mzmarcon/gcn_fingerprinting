@@ -9,6 +9,7 @@ from torch import autograd
 from models import Siamese_GeoChebyConv, GeoSAGEConv, Siamese_GeoSAGEConv, Siamese_GeoChebyConv_Read
 from utils import ContrastiveLoss
 import sys
+import argparse
 from collections import defaultdict
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
@@ -22,72 +23,94 @@ if __name__ == '__main__':
     checkpoint = 'checkpoints/'
     classification = 'FP'
 
-    params = { 'model': 'gcn_cheby_bce',
-               'train_batch_size': 8,
-               'test_batch_size': 1,
-               'learning_rate': 1e-6,
-               'weight_decay': 1e-1,
-               'epochs': 20,
-               'early_stop': 10,
-               'dropout': 0.5,
-               'loss_margin': 0.2,
-               'input_type': 'PSC', #if 'condition', input are betas for condition. if 'allbetas', input vector with all betas.
-               'condition': 'irr', #set type of input condition. 'irr', 'pse', 'reg' or 'all'.
-               'adj_threshold': 0.8}
+    # params = { 'model': 'gcn_cheby_bce',
+            #    'train_batch_size': 8,
+            #    'test_batch_size': 1,
+            #    'learning_rate': 1e-6,
+            #    'weight_decay': 1e-1,
+            #    'epochs': 20,
+            #    'early_stop': 10,
+            #    'dropout': 0.5,
+            #    'loss_margin': 0.2,
+            #    'input_type': 'PSC', #possible inputs are "betas" or "PSC".
+            #    'condition': 'irr', #set type of input condition. 'irr', 'pse', 'reg' or 'all'.
+            #    'adj_threshold': 0.5}
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input_type', type=str, default='PSC',
+                        help='Type of feature data input', choices=['PSC','betas'])   
+    parser.add_argument('--condition', type=str, default='all',
+                        help='Task condition used as input', choices=['reg','irr','pse','all'])
+    parser.add_argument('--split', type=float, default=0.8,
+                        help='Size of training set')
+    parser.add_argument('--adj_threshold', type=float, default='0.5',
+                        help='Threshold for RST connectivity matrix edge selection')
+    parser.add_argument('--model', type=str, default='gcn_cheby_bce',
+                        help='GCN model', choices=['gcn_cheby','gcn_cheby_bce','sage'])
+    parser.add_argument('--hidden', type=int, default=16,
+                        help='Number of hidden layers')
+    parser.add_argument('--training_batch', type=int, default=8,
+                        help='Training batch size')
+    parser.add_argument('--test_batch', type=int, default=1,
+                        help='Test batch size')
+    parser.add_argument('--lr', type=float, default=1e-6,
+                        help='Initial learning rate')
+    parser.add_argument('--weight_decay', type=float, default=1e-1,
+                        help='Weight decay magnitude')
+    parser.add_argument('--dropout', type=float, default=0.5,
+                        help='Dropout magnitude')
+    parser.add_argument('--loss_margin', type=float, default=0.2,
+                        help='Margin for Contrastive Loss function')
+    parser.add_argument('--epochs', type=int, default=20,
+                        help='Number of epochs')
+    parser.add_argument('--early_stop', type=int, default=99,
+                        help='Epochs for early stop')
+    parser.add_argument('--scheduler', type=bool, default=True,
+                        help='Whether to use learning rate scheduler')
+    args = parser.parse_args()
 
 
-    training_set = ACERTA_FP(set_split='training', split=0.8, input_type=params['input_type'],
-                            condition=params['condition'], adj_threshold=params['adj_threshold'])
-
-    test_set = ACERTA_FP(set_split='test', split=0.8, input_type=params['input_type'],
-                            condition=params['condition'], adj_threshold=params['adj_threshold'])
+    training_set = ACERTA_FP(set_split='training', split=args.split, input_type=args.input_type,
+                            condition=args.condition, adj_threshold=args.adj_threshold)
+    test_set = ACERTA_FP(set_split='test', split=args.split, input_type=args.input_type,
+                            condition=args.condition, adj_threshold=args.adj_threshold)
     
     train_loader = DataLoader(training_set, shuffle=True, drop_last=True,
-                                batch_size=params['train_batch_size'])
-
+                                batch_size=args.training_batch)
     test_loader = DataLoader(test_set, shuffle=False, drop_last=False,
-                                batch_size=params['test_batch_size'])
+                                batch_size=args.test_batch)
     
 
     nfeat = train_loader.__iter__().__next__()['input_anchor']['x'].shape[1]
     print("NFEAT: ",nfeat)
     
-    if params['model'] == 'gcn':
-        model = GCN(nfeat=nfeat,
-                    nhid=params['hidden'],
-                    nclass=2,
-                    dropout=params['dropout'])
-
-    if params['model'] == 'sage':
+    if args.model == 'sage':
         model = Siamese_GeoSAGEConv(nfeat=nfeat,
-                            nhid=32,
+                            nhid=args.hidden,
                             nclass=1,
-                            dropout=params['dropout'])
+                            dropout=args.dropout)
+        criterion = ContrastiveLoss(args.loss_margin)
 
-    if params['model'] == 'gcn_cheby':
+    elif args.model == 'gcn_cheby':
         model = Siamese_GeoChebyConv(nfeat=nfeat,
-                                     nhid=32,
+                                     nhid=args.hidden,
                                      nclass=1,
-                                     dropout=params['dropout'])
+                                     dropout=args.dropout)
+        criterion = ContrastiveLoss(args.loss_margin)
 
-    if params['model'] == 'gcn_cheby_bce':
+    elif args.model == 'gcn_cheby_bce':
         model = Siamese_GeoChebyConv_Read(nfeat=nfeat,
-                                     nhid=16,
+                                     nhid=args.hidden,
                                      nclass=1,
-                                     dropout=params['dropout'])
+                                     dropout=args.dropout)
         criterion = BCEWithLogitsLoss()
-
-
     model.to(device)
     
-    if not params['model'] == 'gcn_cheby_bce':
-        criterion = ContrastiveLoss(params['loss_margin'])
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=params['learning_rate'],
-                                weight_decay=params['weight_decay'])
-
-    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-                                             milestones=[20,60,100,150,450,1000,1500], gamma=0.25)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
+                                weight_decay=args.weight_decay)
+    if args.scheduler:
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
+                                                milestones=[20,60,100,150,450,1000,1500], gamma=0.5)
 
 #Training-----------------------------------------------------------------------------
 
@@ -95,9 +118,8 @@ if __name__ == '__main__':
     accuracy_list = []
     training_losses = []
     counter=0   
-    mean_delta_list =[]
 
-    for e in range(params['epochs']):
+    for e in range(args.epochs):
         model.train()
         epoch_loss = []
         for i, data in enumerate(tqdm(train_loader)):
@@ -106,13 +128,12 @@ if __name__ == '__main__':
             label = data['label'].to(device)
             label = torch.split(label,input_anchor.num_graphs)
 
-
-            if params['model'] == 'gcn_cheby':
+            if args.model == 'gcn_cheby':
                 #Match pair:
                 out1, out2 = model(input_anchor,input_pair)
                 training_loss = criterion(out1, out2, label)
 
-            elif params['model'] == 'gcn_cheby_bce':
+            elif args.model == 'gcn_cheby_bce':
                 #Match pair:
                 output = model(input_anchor,input_pair)
                 training_loss = criterion(output, label[0].unsqueeze(1).float())
@@ -124,7 +145,8 @@ if __name__ == '__main__':
 
         counter += 1
         training_losses.append(epoch_loss)
-        lr_scheduler.step()
+        if args.scheduler:
+            lr_scheduler.step()
 
 #Testing-----------------------------------------------------------------------------
         model.eval()
@@ -140,10 +162,11 @@ if __name__ == '__main__':
                 if anchor_test_visit == 'visit2': continue  #ensure visit1 to visit2 test
                 input_achor_test = data_test['input_anchor'].to(device)
 
-                if params['model'] == 'gcn_cheby':
+                if args.model == 'gcn_cheby':
                     input_positive_test = data_test['input_positive'].to(device)
                     input_negative_test = data_test['input_negative'].to(device)
-                    #Get pair similarity:
+
+                    #compute pair similarities:
                     out1_pos, out2_pos = model(input_achor_test,input_positive_test)
                     disimilarity_positive = F.pairwise_distance(out1_pos, out2_pos)
                     
@@ -153,11 +176,11 @@ if __name__ == '__main__':
                     if disimilarity_positive < disimilarity_negative:
                         correct += 1
 
-                elif params['model'] == 'gcn_cheby_bce':
+                elif args.model == 'gcn_cheby_bce':
                     input_pair_test = data_test['input_pair'].to(device)
                     label_test = data_test['label']
 
-                    #Get pair prediction:
+                    #get pair prediction:
                     output = model(input_achor_test,input_pair_test)
                     
                     #predict
@@ -177,11 +200,12 @@ if __name__ == '__main__':
             log = 'Epoch: {:03d}, training_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
             print(log.format(e+1,np.mean(epoch_loss),accuracy,optimizer.param_groups[0]['lr']))
 
-    # np.savez('outfile.npz', loss=training_losses,counter=counter, accuracy=accuracy_list, delta=mean_delta_list)
-    torch.save(model.state_dict(), f"{checkpoint}chk_{classification}_{accuracy:.3f}.pth")
+    # np.savez('outfile.npz', loss=training_losses,counter=counter, accuracy=accuracy_list)
+    torch.save(model.state_dict(), f"{checkpoint}chk_{classification}_{args.condition}_{args.adj_threshold}_{accuracy:.3f}.pth")
 
 #Plots-----------------------------------------------------------------------------
 
+    #plot training loss
     plt.plot(range(counter),np.mean(training_losses,axis=1), label='Training loss')
     plt.title('Training Loss') 
     plt.xlabel('Iterations')
@@ -189,6 +213,7 @@ if __name__ == '__main__':
     plt.legend()
     plt.show()
 
+    #plot accuracy over epochs
     plt.plot(range(e+1),accuracy_list)
     plt.title('Accuracy per epoch') 
     plt.xlabel('Epoch')

@@ -80,7 +80,7 @@ class ACERTA_FP(Dataset):
     def __getitem__(self, idx):
 
         if self.set == 'training':
-            np.random.seed(10)
+            np.random.seed()
         else:
             np.random.seed(42)
 
@@ -141,11 +141,11 @@ class ACERTA_FP(Dataset):
         dataset = []
 
         for visit in ['visit1','visit2']:
-            for id in ids:
-                features = torch.FloatTensor(file_task[visit][id]['betas_rois'][:])
+            for sub_id in ids:
+                features = torch.FloatTensor(file_task[visit][sub_id]['betas_rois'][:])
                 data = Data(x=features, edge_index=adj_rst._indices(), 
-                            edge_attr=adj_rst._values(),label=torch.LongTensor(labels_dict[id]))
-                data.id = (id, visit)
+                            edge_attr=adj_rst._values(),label=torch.LongTensor(labels_dict[sub_id]))
+                data.id = (sub_id, visit)
                 dataset.append({
                     'graph': data
                 })
@@ -179,8 +179,8 @@ class ACERTA_FP(Dataset):
             range_stop=60
 
         for visit in ['visit1','visit2']:
-            for id in ids:
-                features = file_task[visit][id]['betas_rois'][:]
+            for sub_id in ids:
+                features = file_task[visit][sub_id]['betas_rois'][:]
 
                 for n in range(range_start,range_stop):
                     feature = []
@@ -189,8 +189,8 @@ class ACERTA_FP(Dataset):
                     feature = torch.FloatTensor(feature).view(-1,1)
 
                     data = Data(x=feature, edge_index=adj_rst._indices(), 
-                                edge_attr=adj_rst._values(),label=torch.LongTensor(labels_dict[id]))
-                    data.id = (id, visit)
+                                edge_attr=adj_rst._values(),label=torch.LongTensor(labels_dict[sub_id]))
+                    data.id = (sub_id, visit)
                     dataset.append({
                         'graph': data
                     })
@@ -240,8 +240,8 @@ class ACERTA_FP(Dataset):
                 for onset_time in stim_times:
                     feature = []
 
-                    for n in range(onset_time,onset_time+window_t):
-                        feature.append(features[n])
+                    for timestamp in range(onset_time,onset_time+window_t):
+                        feature.append(features[timestamp])
                     feature = np.swapaxes(feature,0,1)
                     feature = torch.FloatTensor(feature)
 
@@ -285,25 +285,45 @@ class ACERTA_FP(Dataset):
         return adj_rst
 
 
-#------------ Reading score classification
+
+#------------ Reading score classification ------------
+
 
 class ACERTA_reading(Dataset):
-    def __init__(self, set_split, split=0.8, input_type='condition', condition='None', adj_threshold=0.0):
+    def __init__(self, set_split, split=0.8, input_type='betas', condition='None', adj_threshold=0.0):
         self.split = split
         self.set = set_split
 
         data_path = 'data/'
         rst_data_file = data_path + 'rst_cn_data.hdf5'
-        # task_data_file = data_path + 'task_data.hdf5'
-        task_data_file = data_path + 'betas_data.hdf5'
-                
-        file_rst = h5py.File(rst_data_file, 'r')
-        file_task = h5py.File(task_data_file, 'r')
+        betas_data_file = data_path + 'betas_data.hdf5'
+        psc_data_file = data_path + 'shen_psc_task_schools.hdf5'
+        stimuli_path = data_path + 'stimuli2/'
+
+        if input_type == 'betas':
+            file_rst = h5py.File(rst_data_file, 'r')
+            file_task = h5py.File(betas_data_file, 'r')
          
-        ids_rst_v1 = list(file_rst['visit1'].keys())
-        ids_rst_v2 = list(file_rst['visit2'].keys())
-        ids_task_v1 = list(file_task['visit1'].keys())
-        ids_task_v2 = list(file_task['visit2'].keys())
+            ids_rst_v1 = list(file_rst['visit1'].keys())
+            ids_rst_v2 = list(file_rst['visit2'].keys())
+            ids_task_v1 = list(file_task['visit1'].keys())
+            ids_task_v2 = list(file_task['visit2'].keys())
+
+        elif input_type == 'PSC':
+            file_rst = h5py.File(rst_data_file, 'r')
+            file_task = h5py.File(psc_data_file, 'r')
+         
+            ids_rst_v1 = list(file_rst['visit1'].keys())
+            ids_rst_v2 = list(file_rst['visit2'].keys())
+
+            task_subjects = list(file_task.keys())
+            ids_task_v1 = []
+            ids_task_v2 = []
+            for subject in task_subjects:
+                if 'visit1' in list(file_task[subject].keys()):
+                    ids_task_v1.append(subject)
+                if 'visit2' in list(file_task[subject].keys()):
+                    ids_task_v2.append(subject)
 
         sub_list, ids_v1, ids_v2, train_ids, \
         test_ids, train_labels, test_labels = self.get_labels_READING(ids_rst_v1,ids_rst_v2,ids_task_v1,ids_task_v2)
@@ -311,18 +331,21 @@ class ACERTA_reading(Dataset):
         adj_rst = self.generate_mean_adj(file_rst,ids_v1,ids_v2,threshold=adj_threshold)
 
         if self.set == 'training':
-            if input_type == 'condition':
-                self.dataset = self.process_betas_condition_reading_dataset(file_rst,file_task,sub_list,train_ids,train_labels,adj_rst,condition)
-
+            if input_type == 'betas':
+                self.dataset = self.process_betas_reading_dataset(file_task,sub_list,train_ids,train_labels,adj_rst,condition)
+            elif input_type == 'PSC':
+                self.dataset = self.process_psc_reading_dataset(file_task,stimuli_path,sub_list,train_ids,train_labels,adj_rst,condition=condition)
+                
         if self.set == 'test':
-            if input_type == 'condition':
-                self.dataset = self.process_betas_condition_reading_dataset(file_rst,file_task,sub_list,test_ids,test_labels,adj_rst,condition)
-
+            if input_type == 'betas':
+                self.dataset = self.process_betas_reading_dataset(file_task,sub_list,test_ids,test_labels,adj_rst,condition)
+            elif input_type == 'PSC':
+                self.dataset = self.process_psc_reading_dataset(file_task,stimuli_path,sub_list,test_ids,test_labels,adj_rst,condition=condition)
 
     def __getitem__(self, idx):
 
         if self.set == 'training':
-            np.random.seed(0)
+            np.random.seed()
         else:
             np.random.seed(42)
             
@@ -381,7 +404,7 @@ class ACERTA_reading(Dataset):
         return train, test
 
 
-    def process_betas_condition_reading_dataset(self,file_rst,file_task,sub_list,ids,labels,adj_rst,condition):
+    def process_betas_reading_dataset(self,file_task,sub_list,ids,labels,adj_rst,condition):
         dataset = []
      
         if condition == 'irr':
@@ -423,182 +446,29 @@ class ACERTA_reading(Dataset):
 
         return dataset
 
+    def process_psc_reading_dataset(self,file_task,stimuli_path,sub_list,ids,labels,adj_rst,window_t=7,condition='all',remove_baseline=False):
 
-    def get_labels_READING(self, ids_rst_v1,ids_rst_v2,ids_task_v1,ids_task_v2):
-        bom_rst_v1 = self.get_reading_classes(ids_rst_v1,class_type='B') 
-        bom_rst_v2 = self.get_reading_classes(ids_rst_v2,class_type='B') 
-        bom_task_v1 = self.get_reading_classes(ids_task_v1,class_type='B') 
-        bom_task_v2 = self.get_reading_classes(ids_task_v2,class_type='B') 
-
-        mau_rst_v1 = self.get_reading_classes(ids_rst_v1,class_type='M') 
-        mau_rst_v2 = self.get_reading_classes(ids_rst_v2,class_type='M') 
-        mau_task_v1 = self.get_reading_classes(ids_task_v1,class_type='M') 
-        mau_task_v2 = self.get_reading_classes(ids_task_v2,class_type='M') 
-
-        common_bom_v1 = self.common_elements(bom_task_v1,bom_rst_v1)
-        common_bom_v2 = self.common_elements(bom_task_v2,bom_rst_v2)
-        common_mau_v1 = self.common_elements(mau_task_v1,mau_rst_v1)
-        common_mau_v2 = self.common_elements(mau_task_v2,mau_rst_v2)
-
-        #make labels and visit labels for stratification
-        labels = [0]*(len(common_bom_v1)+len(common_bom_v2)) + [1]*(len(common_mau_v1)+len(common_mau_v2))
-        visit_labels = [1]*len(common_bom_v1)+[2]*len(common_bom_v2)+[1]*len(common_mau_v1)+[2]*len(common_mau_v2)
-
-        bom_ids = common_bom_v1 + common_bom_v2
-        mau_ids = common_mau_v1 + common_mau_v2
-        sub_ids = bom_ids + mau_ids
-
-        id_numbers = list(range(len(sub_ids)))
-
-        train_ids, test_ids, train_labels, test_labels = train_test_split(id_numbers, labels, train_size=self.split, stratify=visit_labels)
-
-        sub_list = []
-        for n in id_numbers:
-            sub_list.append((sub_ids[n],visit_labels[n]))
-
-        #generate adjaency
-        ids_v1 = common_bom_v1 + common_mau_v1
-        ids_v2 = common_bom_v2 + common_mau_v2
-
-        return sub_list, ids_v1, ids_v2, train_ids, test_ids, train_labels, test_labels
-
-
-    def get_reading_classes(self, ids_list, class_type='B'):
-        class_list = []
-        for item in ids_list:
-            if class_type in item:
-                class_list.append(item)
-                
-        return class_list
-
-    def generate_mean_adj(self,file_rst,ids_v1,ids_v2,threshold):
-        cn_matrix_list = []
-
-        for sub_id in ids_v1:
-            visit='visit1'
-            data_rst = file_rst[visit][sub_id]['cn_matrix'][:]
-            cn_matrix_list.append(data_rst)
-
-        for sub_id in ids_v2:
-            visit='visit2'
-            data_rst = file_rst[visit][sub_id]['cn_matrix'][:]
-            cn_matrix_list.append(data_rst)
-        
-        cn_matrix = np.mean(cn_matrix_list,axis=0)
-
-        mask_rst, _ = get_adjacency(cn_matrix,threshold)
-        adj_rst = sparse.coo_matrix(mask_rst)
-        adj_rst = torch.sparse_coo_tensor(torch.LongTensor(np.vstack((adj_rst.row, adj_rst.col))),
-                                            torch.FloatTensor(adj_rst.data),
-                                            adj_rst.shape)
-
-        return adj_rst
-
-#------------ Skorch -------------
-
-class ACERTA_skorch(Dataset):
-    def __init__(self, set_split, split=0.8, input_type='condition', condition='None', adj_threshold=0.0):
-        self.split = split
-        self.set = set_split
-
-        data_path = 'data/'
-        rst_data_file = data_path + 'rst_cn_data.hdf5'
-        # task_data_file = data_path + 'task_data.hdf5'
-        task_data_file = data_path + 'betas_data.hdf5'
-                
-        file_rst = h5py.File(rst_data_file, 'r')
-        file_task = h5py.File(task_data_file, 'r')
-         
-        ids_rst_v1 = list(file_rst['visit1'].keys())
-        ids_rst_v2 = list(file_rst['visit2'].keys())
-        ids_task_v1 = list(file_task['visit1'].keys())
-        ids_task_v2 = list(file_task['visit2'].keys())
-
-        sub_list, ids_v1, ids_v2, train_ids, \
-        test_ids, train_labels, test_labels = self.get_labels_READING(ids_rst_v1,ids_rst_v2,ids_task_v1,ids_task_v2)
-
-        adj_rst = self.generate_mean_adj(file_rst,ids_v1,ids_v2,threshold=adj_threshold)
-
-        if self.set == 'training':
-            if input_type == 'condition':
-                self.dataset = self.process_betas_condition_reading_dataset(file_rst,file_task,sub_list,train_ids,train_labels,adj_rst,condition)
-
-        if self.set == 'test':
-            if input_type == 'condition':
-                self.dataset = self.process_betas_condition_reading_dataset(file_rst,file_task,sub_list,test_ids,test_labels,adj_rst,condition)
-
-
-    def __getitem__(self, idx):
-
-        if self.set == 'training':
-            np.random.seed(0)
-        else:
-            np.random.seed(42)
-            
-        data_anchor = self.dataset[idx]
-        anchor_label = data_anchor['graph']['label']
-        anchor_id = data_anchor['graph']['id']
-
-        coin_flip = np.random.randint(0,2)
-
-        if coin_flip == 1: #get positive example
-            label = 1 #for cross-entropy.
-            while True:
-                rnd_positive = np.random.randint(len(self.dataset))
-                if self.dataset[rnd_positive]['graph']['label'] == anchor_label: #if label is the same
-                    if not self.dataset[rnd_positive]['graph']['id'] == anchor_id: #if not same id
-                        data_pair=self.dataset[rnd_positive]
-                        break
-
-        elif coin_flip == 0: #get negative example
-            label = 0
-            while True:
-                rnd_negative = np.random.randint(len(self.dataset))    
-                if not self.dataset[rnd_negative]['graph']['label'] == anchor_label:
-                    data_pair = self.dataset[rnd_negative]
-                    break
-        
-        return (data_anchor['graph'],data_pair['graph']), label
-
-    def __len__(self):
-        return len(self.dataset)
-
-
-    def common_elements(self,list1,list2):
-        common = [] 
-        for item in list1: 
-            if item in list2: 
-                common.append(item)  
-        return common
-
-
-    def split_train_test(self,id_list,size=0.8,random_seed=42):
-        np.random.seed(random_seed)
-        n_split = int(size*len(id_list))
-        train = list(np.random.choice(id_list,n_split,replace=False))
-        test = []
-        for item in id_list:
-            if item not in train:
-                test.append(item)
-
-        return train, test
-
-
-    def process_betas_condition_reading_dataset(self,file_rst,file_task,sub_list,ids,labels,adj_rst,condition):
+        print("Loading PSC dataset")
         dataset = []
-     
+
+        base_files = sorted(glob(stimuli_path+"base*.1D"))      
+        reg_files = sorted(glob(stimuli_path+"reg*.1D"))
+        irr_files = sorted(glob(stimuli_path+"irr*.1D"))
+        pse_files = sorted(glob(stimuli_path+"pse*.1D"))
+        
+        base_times = [np.loadtxt(base_files[i],dtype=int).max() for i in range(len(base_files))]
+        reg_times = [np.loadtxt(reg_files[i],dtype=int).max() for i in range(len(reg_files))]
+        irr_times = [np.loadtxt(irr_files[i],dtype=int).max() for i in range(len(irr_files))]
+        pse_times = [np.loadtxt(pse_files[i],dtype=int).max() for i in range(len(pse_files))]
+
         if condition == 'irr':
-            range_start = 0
-            range_stop = 20
+            stim_times = irr_times
         elif condition == 'pse':
-            range_start = 20
-            range_stop = 40
+            stim_times = pse_times
         elif condition == 'reg':
-            range_start = 40
-            range_stop = 60
+            stim_times = reg_times
         else:
-            range_start=0
-            range_stop=60
+            stim_times = sorted(irr_times+reg_times+pse_times)
 
         for n in range(len(ids)):
             sub_id = sub_list[ids[n]][0]
@@ -606,26 +476,30 @@ class ACERTA_skorch(Dataset):
                 visit = 'visit1'
             elif sub_list[ids[n]][1] == 2:
                 visit = 'visit2'
-            
-            # print("Sub id {}\nVisit {}".format(sub_id,visit))
-            
-            features = file_task[visit][sub_id]['betas_rois'][:]
+                
+            print("Loading subject: ",sub_id)
+            for visit in ['visit1','visit2']:
+                features = file_task[sub_id][visit]['psc'][:]
 
-            for beta_stim in range(range_start,range_stop):
-                feature = []
-                for item in features:
-                    feature.append(item[beta_stim])
-                feature = torch.FloatTensor(feature).view(-1,1)
+                for onset_time in stim_times:
+                    feature = []
 
-                data = Data(x=feature, edge_index=adj_rst._indices(), 
-                            edge_attr=adj_rst._values(),label=labels[n])
-                data.id = (sub_id, visit)
-                dataset.append({
-                    'graph': data
-                })
+                    for timestamp in range(onset_time,onset_time+window_t):
+                        feature.append(features[timestamp])
+                    feature = np.swapaxes(feature,0,1)
+                    feature = torch.FloatTensor(feature)
+
+                    #TODO remove baseline
+
+                    data = Data(x=feature, edge_index=adj_rst._indices(), 
+                                edge_attr=adj_rst._values(),label=labels[n])
+                    data.id = (sub_id, visit)
+                    data.time = onset_time
+                    dataset.append({
+                        'graph': data
+                    })
 
         return dataset
-
 
     def get_labels_READING(self, ids_rst_v1,ids_rst_v2,ids_task_v1,ids_task_v2):
         bom_rst_v1 = self.get_reading_classes(ids_rst_v1,class_type='B') 
