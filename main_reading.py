@@ -44,7 +44,7 @@ if __name__ == '__main__':
                         help='Initial learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-1,
                         help='Weight decay magnitude')
-    parser.add_argument('--dropout', type=float, default=0.2,
+    parser.add_argument('--dropout', type=float, default=0.5,
                         help='Dropout magnitude')
     parser.add_argument('--loss_margin', type=float, default=0.2,
                         help='Margin for Contrastive Loss function')
@@ -94,7 +94,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
                                 weight_decay=args.weight_decay)
     if args.scheduler:
-        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.5,patience=12,min_lr=5e-7)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.5,patience=10,min_lr=1e-6)
 #Training-----------------------------------------------------------------------------
 
     counter=0
@@ -150,7 +150,7 @@ if __name__ == '__main__':
                 
                 elif args.model == 'gcn_single':         
                     input_achor_test = data_test['input_anchor'].to(device)
-                    label_test = data_test['label']
+                    label_test = data_test['label_single']
                     output = model(input_achor_test)
 
                 #predict
@@ -172,6 +172,7 @@ if __name__ == '__main__':
             print("Correct: ",correct)
             accuracy = correct/len(test_loader)
             accuracy_list.append(accuracy)
+            print("Predictions: ",y_prediction)
 
             log = 'Epoch: {:03d}, training_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
             print(log.format(e+1,np.mean(epoch_loss),accuracy,optimizer.param_groups[0]['lr']))

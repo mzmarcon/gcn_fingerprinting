@@ -284,26 +284,20 @@ class GeoChebyConv(nn.Module):
         self.dropout = dropout
 
         self.classifier = nn.Sequential(
-            nn.Linear(268, 100),
+            nn.Linear(268, 60),
             nn.ReLU(),
             nn.Dropout(),
-            nn.Linear(100, 60),
-            nn.ReLU(),
-            nn.Dropout(),
+            # nn.Linear(100, 1),
+            # nn.ReLU(),
+            # nn.Dropout(),
             nn.Linear(60, 1),
-            # nn.Sigmoid()
         )
 
     def forward_single(self, data):
-        x = F.relu(self.gc1(data['x'], edge_index=data['edge_index'], edge_weight=data['edge_attr']))
-        BatchNorm(64)
+        x = self.gc1(data['x'], edge_index=data['edge_index'], edge_weight=data['edge_attr'])
+        BatchNorm(4)
+        x = F.relu(x)
         x = F.dropout(x, self.dropout, training=self.training)
-        # x = F.relu(self.gc2(x, edge_index=data['edge_index'], edge_weight=data['edge_attr']))
-        # BatchNorm(64)
-        # x = F.dropout(x, self.dropout, training=self.training)
-        # x = F.relu(self.gc3(x, edge_index=data['edge_index'], edge_weight=data['edge_attr']))
-        # BatchNorm(64)
-        # x = F.dropout(x, self.dropout, training=self.training)
         x = self.gc4(x, edge_index=data['edge_index'], edge_weight=data['edge_attr'])
         return x
 

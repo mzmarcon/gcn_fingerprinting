@@ -431,7 +431,7 @@ class ACERTA_reading(Dataset):
 
     def process_psc_reading_dataset(self,file_task,stimuli_path,sub_list,ids,labels,adj_rst,window_t=7,condition='all',remove_baseline=False):
 
-        print("Loading PSC dataset")
+        print("Loading PSC {} dataset".format(self.set))
         dataset = []
 
         base_files = sorted(glob(stimuli_path+"base*.1D"))      
@@ -510,7 +510,7 @@ class ACERTA_reading(Dataset):
 
         id_numbers = list(range(len(sub_ids)))
 
-        train_ids, test_ids, train_labels, test_labels = train_test_split(id_numbers, labels, train_size=self.split, stratify=visit_labels)
+        train_ids, test_ids, train_labels, test_labels = train_test_split(id_numbers, labels, train_size=self.split, random_state=42)
 
         sub_list = []
         for n in id_numbers:
