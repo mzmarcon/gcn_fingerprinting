@@ -65,7 +65,7 @@ if __name__ == '__main__':
                         help='Number of epochs')
     parser.add_argument('--early_stop', type=int, default=99,
                         help='Epochs for early stop')
-    parser.add_argument('--scheduler', type=bool, default=True,
+    parser.add_argument('--scheduler', type=bool, default=False,
                         help='Whether to use learning rate scheduler')
     args = parser.parse_args()
 
@@ -152,8 +152,9 @@ if __name__ == '__main__':
         model.eval()
         correct=0
         examples = 0
-        seen_labels = [] #assure only one example per subject is seen in test
         predictions = defaultdict(list)
+        y_true = []
+        y_prediction = []
 
         with torch.no_grad():
             for i, data_test in enumerate(test_loader):
@@ -192,6 +193,9 @@ if __name__ == '__main__':
                     if prediction == label_test:
                         correct += 1
 
+                    y_prediction.append(prediction)
+                    y_true.append(label_test)
+
                 examples += 1
             
             accuracy = correct/examples
@@ -200,7 +204,8 @@ if __name__ == '__main__':
             log = 'Epoch: {:03d}, training_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
             print(log.format(e+1,np.mean(epoch_loss),accuracy,optimizer.param_groups[0]['lr']))
 
-    # np.savez('outfile.npz', loss=training_losses,counter=counter, accuracy=accuracy_list)
+    fpr, tpr, thresholds = roc_curve(y_true, y_prediction)
+    np.savez('outfile.npz', loss=training_losses,counter=counter, accuracy=accuracy_list, y_true=y_true, y_prediction=y_prediction)
     torch.save(model.state_dict(), f"{checkpoint}chk_{classification}_{args.condition}_{args.adj_threshold}_{accuracy:.3f}.pth")
 
 #Plots-----------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import ChebConv, SAGEConv
+from torch_geometric.nn import ChebConv, SAGEConv, BatchNorm
 from utils import ContrastiveLoss
 from torch_geometric.data import Data
 from torch_geometric.utils import to_dense_batch 
@@ -136,7 +136,6 @@ class Siamese_GeoChebyConv_Read(nn.Module):
         # x = F.relu(self.gc3(x, edge_index=data['edge_index'], edge_weight=data['edge_attr']))
         # x = F.dropout(x, self.dropout, training=self.training)
         x = F.relu(self.gc4(x, edge_index=data['edge_index'], edge_weight=data['edge_attr']))
-        # return F.log_softmax(x, dim=1)
         return x
 
     def forward(self, data1, data2):
@@ -270,3 +269,54 @@ class GeoSAGEConv(nn.Module):
         x = self.classifier(x.T)
         # return F.log_softmax(x, dim=1)
         return x
+
+
+class GeoChebyConv(nn.Module):
+    def __init__(self, nfeat, nhid, nclass, dropout):
+        super(GeoChebyConv,self).__init__()
+
+        K = 3
+        nclass = int(nclass)
+        self.gc1 = ChebConv(nfeat, nhid, K)
+        self.gc2 = ChebConv(nhid, nhid, K)
+        self.gc3 = ChebConv(nhid, nhid, K)
+        self.gc4 = ChebConv(nhid, nclass, K)
+        self.dropout = dropout
+
+        self.classifier = nn.Sequential(
+            nn.Linear(268, 100),
+            nn.ReLU(),
+            nn.Dropout(),
+            nn.Linear(100, 60),
+            nn.ReLU(),
+            nn.Dropout(),
+            nn.Linear(60, 1),
+            # nn.Sigmoid()
+        )
+
+    def forward_single(self, data):
+        x = F.relu(self.gc1(data['x'], edge_index=data['edge_index'], edge_weight=data['edge_attr']))
+        BatchNorm(64)
+        x = F.dropout(x, self.dropout, training=self.training)
+        # x = F.relu(self.gc2(x, edge_index=data['edge_index'], edge_weight=data['edge_attr']))
+        # BatchNorm(64)
+        # x = F.dropout(x, self.dropout, training=self.training)
+        # x = F.relu(self.gc3(x, edge_index=data['edge_index'], edge_weight=data['edge_attr']))
+        # BatchNorm(64)
+        # x = F.dropout(x, self.dropout, training=self.training)
+        x = self.gc4(x, edge_index=data['edge_index'], edge_weight=data['edge_attr'])
+        return x
+
+    def forward(self, data):
+        outs = []
+        data_graphs = data.to_data_list()
+
+        for graph_num in range(data.num_graphs):
+            input_graph = data_graphs[graph_num]     
+            conv_out = self.forward_single(input_graph)
+            dense_out = self.classifier(conv_out.T)
+            outs.append(dense_out)
+
+        output = torch.stack(outs,dim=0).squeeze()
+
+        return output

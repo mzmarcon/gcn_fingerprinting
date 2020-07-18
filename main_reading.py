@@ -5,7 +5,7 @@ from torch_geometric.data import DataLoader
 from torch.autograd import Variable
 from dataset_loader import ACERTA_FP, ACERTA_reading
 from torch import autograd
-from models import Siamese_GeoChebyConv, Siamese_GeoSAGEConv, Siamese_GeoChebyConv_Read
+from models import Siamese_GeoChebyConv, Siamese_GeoSAGEConv, Siamese_GeoChebyConv_Read, GeoChebyConv
 from utils import ContrastiveLoss
 from torch.nn import BCEWithLogitsLoss
 import sys
@@ -32,8 +32,8 @@ if __name__ == '__main__':
                         help='Size of training set')
     parser.add_argument('--adj_threshold', type=float, default='0.5',
                         help='Threshold for RST connectivity matrix edge selection')
-    parser.add_argument('--model', type=str, default='gcn_cheby_bce',
-                        help='GCN model', choices=['gcn_cheby','gcn_cheby_bce','sage'])
+    parser.add_argument('--model', type=str, default='gcn_single',
+                        help='GCN model', choices=['gcn_cheby','gcn_cheby_bce','sage','gcn_single'])
     parser.add_argument('--hidden', type=int, default=32,
                         help='Number of hidden layers')
     parser.add_argument('--training_batch', type=int, default=8,
@@ -44,7 +44,7 @@ if __name__ == '__main__':
                         help='Initial learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-1,
                         help='Weight decay magnitude')
-    parser.add_argument('--dropout', type=float, default=0.5,
+    parser.add_argument('--dropout', type=float, default=0.2,
                         help='Dropout magnitude')
     parser.add_argument('--loss_margin', type=float, default=0.2,
                         help='Margin for Contrastive Loss function')
@@ -77,36 +77,48 @@ if __name__ == '__main__':
                             nclass=1,
                             dropout=args.dropout)
 
-    if args.model == 'gcn_cheby_bce':
+    elif args.model == 'gcn_cheby_bce':
         model = Siamese_GeoChebyConv_Read(nfeat=nfeat,
                                      nhid=args.hidden,
                                      nclass=1,
                                      dropout=args.dropout)
+
+    elif args.model == 'gcn_single':
+        model = GeoChebyConv(nfeat=nfeat,
+                            nhid=args.hidden,
+                            nclass=1,
+                            dropout=args.dropout)
+
     model.to(device)
-    
     criterion = BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
                                 weight_decay=args.weight_decay)
     if args.scheduler:
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-                                                milestones=[30,70,200,450,1000,1500], gamma=0.5)
-
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.5,patience=12,min_lr=5e-7)
 #Training-----------------------------------------------------------------------------
 
     counter=0
     training_losses = []
     accuracy_list = []
-
     for e in range(args.epochs):
         model.train()
         epoch_loss = []
         for i, data in enumerate(tqdm(train_loader)):
-            input_anchor = data['input_anchor'].to(device)
-            input_pair = data['input_pair'].to(device)
-            label = data['label'].unsqueeze(1).to(device)
-            
-            #Match pair:
-            output = model(input_anchor,input_pair).to(device)
+
+            if args.model == 'gcn_cheby_bce':
+                input_anchor = data['input_anchor'].to(device)
+                input_pair = data['input_pair'].to(device)
+                label = data['label'].unsqueeze(1).to(device)
+                
+                #Match pair:
+                output = model(input_anchor,input_pair).to(device)
+
+            elif args.model == 'gcn_single':
+                input_anchor = data['input_anchor'].to(device)
+                input_pair = data['input_pair'].to(device)
+                label = data['label_single'].to(device)
+
+                output = model(input_anchor).to(device)
 
             training_loss = criterion(output, label.float())
             epoch_loss.append(training_loss.item())
@@ -117,23 +129,30 @@ if __name__ == '__main__':
         counter += 1
         training_losses.append(epoch_loss)
         if args.scheduler:
-            lr_scheduler.step()
+            lr_scheduler.step(np.mean(epoch_loss))
 
 #Testing-----------------------------------------------------------------------------
         model.eval()
         correct = 0
         predictions = defaultdict(list)
-
+        y_prediction = []
+        y_true = []
         with torch.no_grad():
             for i, data_test in enumerate(test_loader):
                 anchor_test_id, anchor_test_visit = data_test['input_anchor']['id'][0]
-                               
-                input_achor_test = data_test['input_anchor'].to(device)
-                input_pair_test = data_test['input_pair'].to(device)
-                label_test = data_test['label']
-                #Get pair prediction:
-                output = model(input_achor_test,input_pair_test)
+
+                if args.model == 'gcn_cheby_bce':         
+                    input_achor_test = data_test['input_anchor'].to(device)
+                    input_pair_test = data_test['input_pair'].to(device)
+                    label_test = data_test['label']
+                    #Get pair prediction:
+                    output = model(input_achor_test,input_pair_test)
                 
+                elif args.model == 'gcn_single':         
+                    input_achor_test = data_test['input_anchor'].to(device)
+                    label_test = data_test['label']
+                    output = model(input_achor_test)
+
                 #predict
                 if nn.Sigmoid()(output)>0.5:
                     prediction = 1
@@ -142,7 +161,10 @@ if __name__ == '__main__':
 
                 if prediction == label_test:
                     correct += 1
-            
+
+                y_prediction.append(prediction)
+                y_true.append(label_test)
+
             print('Pred: ',prediction)
             print("Label: ", label_test)
             print("Id Anchor: ", data_test['anchor_id'])
@@ -151,8 +173,8 @@ if __name__ == '__main__':
             accuracy = correct/len(test_loader)
             accuracy_list.append(accuracy)
 
-            log = 'Epoch: {:03d}, train_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
-            print(log.format(e+1,np.mean(training_losses),accuracy,optimizer.param_groups[0]['lr']))
+            log = 'Epoch: {:03d}, training_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
+            print(log.format(e+1,np.mean(epoch_loss),accuracy,optimizer.param_groups[0]['lr']))
 
     # np.savez('outfile.npz', loss=training_losses, counter=counter, accuracy=accuracy_list)
     torch.save(model.state_dict(), f"{checkpoint}chk_{classification}_{accuracy:.3f}.pth")
@@ -161,9 +183,10 @@ if __name__ == '__main__':
 
     plt.plot(range(counter),np.mean(training_losses,axis=1), label='Training loss')
     plt.title('Training Loss') 
-    plt.xlabel('Iterations')
+    plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.legend()
+    plt.grid()
     plt.show()
 
     plt.plot(range(e+1),accuracy_list)

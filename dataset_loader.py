@@ -79,10 +79,7 @@ class ACERTA_FP(Dataset):
 
     def __getitem__(self, idx):
 
-        if self.set == 'training':
-            np.random.seed()
-        else:
-            np.random.seed(42)
+        np.random.seed()
 
         data_anchor = self.dataset[idx]
         positive_anchor = np.random.choice(data_anchor['matching_idx'])
@@ -344,11 +341,8 @@ class ACERTA_reading(Dataset):
 
     def __getitem__(self, idx):
 
-        if self.set == 'training':
-            np.random.seed()
-        else:
-            np.random.seed(42)
-            
+        np.random.seed()
+
         data_anchor = self.dataset[idx]
         anchor_label = data_anchor['graph']['label']
         anchor_id = data_anchor['graph']['id']
@@ -376,6 +370,7 @@ class ACERTA_reading(Dataset):
             'input_anchor'          : data_anchor['graph'],
             'input_pair'            : data_pair['graph'],
             'label'                 : label,
+            'label_single'          : data_anchor['graph']['label'],
             'anchor_id'             : data_anchor['graph']['id'],
             'pair_id'               : data_pair['graph']['id']
         }
@@ -390,18 +385,6 @@ class ACERTA_reading(Dataset):
             if item in list2: 
                 common.append(item)  
         return common
-
-
-    def split_train_test(self,id_list,size=0.8,random_seed=42):
-        np.random.seed(random_seed)
-        n_split = int(size*len(id_list))
-        train = list(np.random.choice(id_list,n_split,replace=False))
-        test = []
-        for item in id_list:
-            if item not in train:
-                test.append(item)
-
-        return train, test
 
 
     def process_betas_reading_dataset(self,file_task,sub_list,ids,labels,adj_rst,condition):
