@@ -463,6 +463,8 @@ class ACERTA_reading(Dataset):
             print("Loading subject: ",sub_id)
             for visit in ['visit1','visit2']:
                 features = file_task[sub_id][visit]['psc'][:]
+                #z-score normalization:
+                features =  (features - np.mean(features)) / np.std(features)
 
                 for onset_time in stim_times:
                     feature = []
@@ -510,7 +512,7 @@ class ACERTA_reading(Dataset):
 
         id_numbers = list(range(len(sub_ids)))
 
-        train_ids, test_ids, train_labels, test_labels = train_test_split(id_numbers, labels, train_size=self.split, random_state=42)
+        train_ids, test_ids, train_labels, test_labels = train_test_split(id_numbers, labels, stratify=labels,train_size=self.split, random_state=42)
 
         sub_list = []
         for n in id_numbers:

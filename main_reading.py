@@ -15,6 +15,8 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from scipy.stats import mode 
 from tqdm import tqdm
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
 
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -28,7 +30,7 @@ if __name__ == '__main__':
                         help='Type of feature data input', choices=['PSC','betas'])   
     parser.add_argument('--condition', type=str, default='all',
                         help='Task condition used as input', choices=['reg','irr','pse','all'])
-    parser.add_argument('--split', type=float, default=0.8,
+    parser.add_argument('--split', type=float, default=0.7,
                         help='Size of training set')
     parser.add_argument('--adj_threshold', type=float, default='0.5',
                         help='Threshold for RST connectivity matrix edge selection')
@@ -42,7 +44,7 @@ if __name__ == '__main__':
                         help='Test batch size')
     parser.add_argument('--lr', type=float, default=1e-5,
                         help='Initial learning rate')
-    parser.add_argument('--weight_decay', type=float, default=1e-1,
+    parser.add_argument('--weight_decay', type=float, default=1e-2,
                         help='Weight decay magnitude')
     parser.add_argument('--dropout', type=float, default=0.5,
                         help='Dropout magnitude')
@@ -57,9 +59,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
 
-    training_set = ACERTA_reading(set_split='training', split=0.8, input_type=args.input_type,
+    training_set = ACERTA_reading(set_split='training', split=args.split, input_type=args.input_type,
                             condition=args.condition, adj_threshold=args.adj_threshold)
-    test_set = ACERTA_reading(set_split='test', split=0.8, input_type=args.input_type,
+    test_set = ACERTA_reading(set_split='test', split=args.split, input_type=args.input_type,
                             condition=args.condition, adj_threshold=args.adj_threshold)
     
     train_loader = DataLoader(training_set, shuffle=True, drop_last=True,
@@ -99,6 +101,7 @@ if __name__ == '__main__':
 
     counter=0
     training_losses = []
+    test_losses = []
     accuracy_list = []
     for e in range(args.epochs):
         model.train()
@@ -136,7 +139,10 @@ if __name__ == '__main__':
         correct = 0
         predictions = defaultdict(list)
         y_prediction = []
+        y_output = []
         y_true = []
+        test_epoch_loss = []
+        test_counter = 0
         with torch.no_grad():
             for i, data_test in enumerate(test_loader):
                 anchor_test_id, anchor_test_visit = data_test['input_anchor']['id'][0]
@@ -153,6 +159,7 @@ if __name__ == '__main__':
                     label_test = data_test['label_single']
                     output = model(input_achor_test)
 
+                test_loss = criterion(output, label_test.float().squeeze())
                 #predict
                 if nn.Sigmoid()(output)>0.5:
                     prediction = 1
@@ -162,9 +169,12 @@ if __name__ == '__main__':
                 if prediction == label_test:
                     correct += 1
 
+                y_output.append(nn.Sigmoid()(output))
                 y_prediction.append(prediction)
                 y_true.append(label_test)
-
+                test_epoch_loss.append(test_loss)
+            
+            test_losses.append(test_epoch_loss)
             print('Pred: ',prediction)
             print("Label: ", label_test)
             print("Id Anchor: ", data_test['anchor_id'])
@@ -174,26 +184,36 @@ if __name__ == '__main__':
             accuracy_list.append(accuracy)
             print("Predictions: ",y_prediction)
 
-            log = 'Epoch: {:03d}, training_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
-            print(log.format(e+1,np.mean(epoch_loss),accuracy,optimizer.param_groups[0]['lr']))
+            log = 'Epoch: {:03d}, training_loss: {:.3f}, test_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
+            print(log.format(e+1,np.mean(epoch_loss),np.mean(test_epoch_loss),accuracy,optimizer.param_groups[0]['lr']))
+
+    cm = confusion_matrix(y_true, y_prediction,normalize='true')
 
     # np.savez('outfile.npz', loss=training_losses, counter=counter, accuracy=accuracy_list)
-    torch.save(model.state_dict(), f"{checkpoint}chk_{classification}_{accuracy:.3f}.pth")
+    # torch.save(model.state_dict(), f"{checkpoint}chk_{classification}_{accuracy:.3f}.pth")
 
 #Plots-----------------------------------------------------------------------------
 
+    fig = plt.figure(figsize=(10,8))
     plt.plot(range(counter),np.mean(training_losses,axis=1), label='Training loss')
-    plt.title('Training Loss') 
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
+    plt.plot(range(counter),np.mean(test_losses,axis=1), label='Test loss')
+    plt.title('BCE Loss',fontsize=20)
+    plt.xlabel('Epochs',fontsize=20)
+    plt.ylabel('Loss',fontsize=20)
     plt.legend()
     plt.grid()
     plt.show()
 
+    fig = plt.figure(figsize=(10,8))
     plt.plot(range(e+1),accuracy_list)
-    plt.title('Accuracy per epoch') 
-    plt.xlabel('Epoch')
-    plt.ylabel('Accuracy')
+    plt.title('Accuracy per epoch',fontsize=20)
+    plt.xlabel('Epoch',fontsize=20)
+    plt.ylabel('Accuracy',fontsize=20)
     plt.grid()
     plt.show()
 
+    fig, ax = plt.subplots(figsize=(10,8))  
+    sns.heatmap(cm, annot=True, ax = ax, fmt='g',cmap='Blues');  
+    ax.set_xlabel('Predicted labels',fontsize=20);ax.set_ylabel('True labels',fontsize=20);   
+    ax.set_title('Confusion Matrix',fontsize=20);  
+    ax.xaxis.set_ticklabels(['Good', 'Bad'],fontsize=18); ax.yaxis.set_ticklabels(['Good', 'Bad'],fontsize=18);   
