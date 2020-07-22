@@ -15,7 +15,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from scipy.stats import mode 
 from tqdm import tqdm
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score
 import seaborn as sns
 
 if __name__ == '__main__':
@@ -36,13 +36,13 @@ if __name__ == '__main__':
                         help='Threshold for RST connectivity matrix edge selection')
     parser.add_argument('--model', type=str, default='gcn_single',
                         help='GCN model', choices=['gcn_cheby','gcn_cheby_bce','sage','gcn_single'])
-    parser.add_argument('--hidden', type=int, default=32,
+    parser.add_argument('--hidden', type=int, default=16,
                         help='Number of hidden layers')
-    parser.add_argument('--training_batch', type=int, default=8,
+    parser.add_argument('--training_batch', type=int, default=4,
                         help='Training batch size')
     parser.add_argument('--test_batch', type=int, default=1,
                         help='Test batch size')
-    parser.add_argument('--lr', type=float, default=1e-5,
+    parser.add_argument('--lr', type=float, default=5e-5,
                         help='Initial learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-2,
                         help='Weight decay magnitude')
@@ -50,7 +50,7 @@ if __name__ == '__main__':
                         help='Dropout magnitude')
     parser.add_argument('--loss_margin', type=float, default=0.2,
                         help='Margin for Contrastive Loss function')
-    parser.add_argument('--epochs', type=int, default=20,
+    parser.add_argument('--epochs', type=int, default=100,
                         help='Number of epochs')
     parser.add_argument('--early_stop', type=int, default=99,
                         help='Epochs for early stop')
@@ -188,8 +188,10 @@ if __name__ == '__main__':
             print(log.format(e+1,np.mean(epoch_loss),np.mean(test_epoch_loss),accuracy,optimizer.param_groups[0]['lr']))
 
     cm = confusion_matrix(y_true, y_prediction,normalize='true')
-
-    # np.savez('outfile.npz', loss=training_losses, counter=counter, accuracy=accuracy_list)
+    fpr, tpr, thresholds = roc_curve(y_true, torch.tensor(y_output).cpu())
+    auc_score = roc_auc_score(y_true, y_prediction)
+    np.savez('outfile.npz', training_loss=training_losses, test_loss=test_losses, counter=counter, accuracy=accuracy_list, \
+            cm=cm,fpr=fpr,tpr=tpr,thresholds=thresholds,auc_score=auc_score)
     # torch.save(model.state_dict(), f"{checkpoint}chk_{classification}_{accuracy:.3f}.pth")
 
 #Plots-----------------------------------------------------------------------------
@@ -200,7 +202,7 @@ if __name__ == '__main__':
     plt.title('BCE Loss',fontsize=20)
     plt.xlabel('Epochs',fontsize=20)
     plt.ylabel('Loss',fontsize=20)
-    plt.legend()
+    plt.legend(prop={'size': 16})
     plt.grid()
     plt.show()
 
@@ -213,7 +215,18 @@ if __name__ == '__main__':
     plt.show()
 
     fig, ax = plt.subplots(figsize=(10,8))  
-    sns.heatmap(cm, annot=True, ax = ax, fmt='g',cmap='Blues');  
+    sns.heatmap(cm, annot=True, ax = ax, fmt='.2g',cmap='Blues',annot_kws={"fontsize":18});  
     ax.set_xlabel('Predicted labels',fontsize=20);ax.set_ylabel('True labels',fontsize=20);   
     ax.set_title('Confusion Matrix',fontsize=20);  
-    ax.xaxis.set_ticklabels(['Good', 'Bad'],fontsize=18); ax.yaxis.set_ticklabels(['Good', 'Bad'],fontsize=18);   
+    ax.xaxis.set_ticklabels(['Good', 'Bad'],fontsize=18); ax.yaxis.set_ticklabels(['Good', 'Bad'],fontsize=18);
+    plt.show()
+
+    fig, ax = plt.subplots(figsize=(10,8))  
+    plt.plot(fpr,tpr, label='ROC curve (area = %0.2f)' % auc_score)
+    plt.plot([0, 1], [0, 1], color='grey', linestyle='--')
+    plt.grid()
+    plt.title('ROC Curve',fontsize=20)
+    plt.xlabel('False Positive Rate',fontsize=20)
+    plt.ylabel('True Positive Rate',fontsize=20)
+    plt.legend(prop={'size': 16})
+    plt.show()

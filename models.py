@@ -295,7 +295,7 @@ class GeoChebyConv(nn.Module):
 
     def forward_single(self, data):
         x = self.gc1(data['x'], edge_index=data['edge_index'], edge_weight=data['edge_attr'])
-        BatchNorm(4)
+        BatchNorm(16)
         x = F.relu(x)
         x = F.dropout(x, self.dropout, training=self.training)
         x = self.gc4(x, edge_index=data['edge_index'], edge_weight=data['edge_attr'])
