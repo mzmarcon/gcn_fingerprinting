@@ -175,14 +175,14 @@ if __name__ == '__main__':
                 test_epoch_loss.append(test_loss)
             
             test_losses.append(test_epoch_loss)
-            print('Pred: ',prediction)
-            print("Label: ", label_test)
-            print("Id Anchor: ", data_test['anchor_id'])
-            print("Id Pair: ", data_test['pair_id'])
-            print("Correct: ",correct)
+            # print('Pred: ',prediction)
+            # print("Label: ", label_test)
+            # print("Id Anchor: ", data_test['anchor_id'])
+            # print("Id Pair: ", data_test['pair_id'])
+            # print("Correct: ",correct)
             accuracy = correct/len(test_loader)
             accuracy_list.append(accuracy)
-            print("Predictions: ",y_prediction)
+            # print("Predictions: ",y_prediction)
 
             log = 'Epoch: {:03d}, training_loss: {:.3f}, test_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
             print(log.format(e+1,np.mean(epoch_loss),np.mean(test_epoch_loss),accuracy,optimizer.param_groups[0]['lr']))
@@ -198,7 +198,7 @@ if __name__ == '__main__':
 
     fig = plt.figure(figsize=(10,8))
     plt.plot(range(counter),np.mean(training_losses,axis=1), label='Training loss')
-    plt.plot(range(counter),np.mean(test_losses,axis=1), label='Test loss')
+    plt.plot(range(counter),np.mean(test_losses,axis=1), label='Validation loss')
     plt.title('BCE Loss',fontsize=20)
     plt.xlabel('Epochs',fontsize=20)
     plt.ylabel('Loss',fontsize=20)

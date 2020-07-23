@@ -23,19 +23,6 @@ if __name__ == '__main__':
     checkpoint = 'checkpoints/'
     classification = 'FP'
 
-    # params = { 'model': 'gcn_cheby_bce',
-            #    'train_batch_size': 8,
-            #    'test_batch_size': 1,
-            #    'learning_rate': 1e-6,
-            #    'weight_decay': 1e-1,
-            #    'epochs': 20,
-            #    'early_stop': 10,
-            #    'dropout': 0.5,
-            #    'loss_margin': 0.2,
-            #    'input_type': 'PSC', #possible inputs are "betas" or "PSC".
-            #    'condition': 'irr', #set type of input condition. 'irr', 'pse', 'reg' or 'all'.
-            #    'adj_threshold': 0.5}
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_type', type=str, default='PSC',
                         help='Type of feature data input', choices=['PSC','betas'])   
@@ -117,6 +104,7 @@ if __name__ == '__main__':
     delta_loss = defaultdict(list)
     accuracy_list = []
     training_losses = []
+    test_losses = []
     counter=0   
 
     for e in range(args.epochs):
@@ -155,6 +143,7 @@ if __name__ == '__main__':
         predictions = defaultdict(list)
         y_true = []
         y_prediction = []
+        test_epoch_loss = []
 
         with torch.no_grad():
             for i, data_test in enumerate(test_loader):
@@ -169,13 +158,18 @@ if __name__ == '__main__':
 
                     #compute pair similarities:
                     out1_pos, out2_pos = model(input_achor_test,input_positive_test)
-                    disimilarity_positive = F.pairwise_distance(out1_pos, out2_pos)
+                    disimilarity_positive = torch.sum(F.pairwise_distance(out1_pos, out2_pos))
                     
                     out1_neg, out2_neg = model(input_achor_test,input_negative_test)
-                    disimilarity_negative = F.pairwise_distance(out1_neg, out2_neg)
+                    disimilarity_negative = torch.sum(F.pairwise_distance(out1_neg, out2_neg))
 
                     if disimilarity_positive < disimilarity_negative:
                         correct += 1
+
+                    test_loss_pos = criterion(out1_pos, out2_pos, [[0]])
+                    test_loss_neg = criterion(out1_neg, out2_neg, [[1]])
+                    test_loss = torch.mean(torch.stack((test_loss_pos,test_loss_neg)))
+
 
                 elif args.model == 'gcn_cheby_bce':
                     input_pair_test = data_test['input_pair'].to(device)
@@ -183,7 +177,8 @@ if __name__ == '__main__':
 
                     #get pair prediction:
                     output = model(input_achor_test,input_pair_test)
-                    
+                    test_loss = criterion(output.squeeze(1), label_test.to(device).float())
+
                     #predict
                     if nn.Sigmoid()(output)>0.5:
                         prediction = 1
@@ -197,33 +192,38 @@ if __name__ == '__main__':
                     y_true.append(label_test)
 
                 examples += 1
-            
+                test_epoch_loss.append(test_loss.item())
             accuracy = correct/examples
             accuracy_list.append(accuracy)
+            test_losses.append(test_epoch_loss)
 
-            log = 'Epoch: {:03d}, training_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
-            print(log.format(e+1,np.mean(epoch_loss),accuracy,optimizer.param_groups[0]['lr']))
+            log = 'Epoch: {:03d}, training_loss: {:.3f}, test_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
+            print(log.format(e+1,np.mean(epoch_loss),np.mean(test_epoch_loss),accuracy,optimizer.param_groups[0]['lr']))
 
-    fpr, tpr, thresholds = roc_curve(y_true, y_prediction)
-    np.savez('outfile.npz', loss=training_losses,counter=counter, accuracy=accuracy_list, y_true=y_true, y_prediction=y_prediction)
-    torch.save(model.state_dict(), f"{checkpoint}chk_{classification}_{args.condition}_{args.adj_threshold}_{accuracy:.3f}.pth")
+    # fpr, tpr, thresholds = roc_curve(y_true, y_prediction)
+    np.savez('outfile.npz', training_loss=training_losses,test_losses=test_losses,counter=counter, accuracy=accuracy_list, y_true=y_true, y_prediction=y_prediction)
+    # torch.save(model.state_dict(), f"{checkpoint}chk_{classification}_{args.condition}_{args.adj_threshold}_{accuracy:.3f}.pth")
 
 #Plots-----------------------------------------------------------------------------
 
-    #plot training loss
-    plt.plot(range(counter),np.mean(training_losses,axis=1), label='Training loss')
-    plt.title('Training Loss') 
-    plt.xlabel('Iterations')
-    plt.ylabel('Loss')
-    plt.legend()
+    #plot training loss  
+    fig = plt.figure(figsize=(10,8)) 
+    plt.plot(range(counter),np.mean(training_losses,axis=1), label='Training loss') 
+    plt.plot(range(counter),np.mean(test_losses,axis=1), label='Validation loss') 
+    plt.title('Fingerprinting',fontsize=20) 
+    plt.xlabel('Epochs',fontsize=20) 
+    plt.ylabel('Loss',fontsize=20) 
+    plt.legend(prop={'size': 16}) 
+    # plt.grid()
     plt.show()
 
     #plot accuracy over epochs
+    fig = plt.figure(figsize=(10,8)) 
     plt.plot(range(e+1),accuracy_list)
-    plt.title('Accuracy per epoch') 
-    plt.xlabel('Epoch')
-    plt.ylabel('Accuracy')
-    plt.grid()
+    plt.title('Fingerprinting',fontsize=20) 
+    plt.xlabel('Epoch',fontsize=20)
+    plt.ylabel('Accuracy',fontsize=20)
+    # plt.grid()
     plt.show()
 
 
