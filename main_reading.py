@@ -56,6 +56,8 @@ if __name__ == '__main__':
                         help='Epochs for early stop')
     parser.add_argument('--scheduler', type=bool, default=True,
                         help='Whether to use learning rate scheduler')
+    parser.add_argument('--outfile', type=str, default='outfile.npz',
+                        help='Path for output file containing results metrics.')
     args = parser.parse_args()
 
 
@@ -179,10 +181,10 @@ if __name__ == '__main__':
             # print("Label: ", label_test)
             # print("Id Anchor: ", data_test['anchor_id'])
             # print("Id Pair: ", data_test['pair_id'])
-            # print("Correct: ",correct)
+            print("Correct: ",correct)
             accuracy = correct/len(test_loader)
             accuracy_list.append(accuracy)
-            # print("Predictions: ",y_prediction)
+            print("Predictions: ",y_prediction)
 
             log = 'Epoch: {:03d}, training_loss: {:.3f}, test_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
             print(log.format(e+1,np.mean(epoch_loss),np.mean(test_epoch_loss),accuracy,optimizer.param_groups[0]['lr']))
@@ -190,8 +192,8 @@ if __name__ == '__main__':
     cm = confusion_matrix(y_true, y_prediction,normalize='true')
     fpr, tpr, thresholds = roc_curve(y_true, torch.tensor(y_output).cpu())
     auc_score = roc_auc_score(y_true, y_prediction)
-    np.savez('outfile.npz', training_loss=training_losses, test_loss=test_losses, counter=counter, accuracy=accuracy_list, \
-            cm=cm,fpr=fpr,tpr=tpr,thresholds=thresholds,auc_score=auc_score)
+    np.savez(args.outfile, training_loss=training_losses, test_loss=test_losses, counter=counter, accuracy=accuracy_list, \
+            cm=cm,fpr=fpr,tpr=tpr,thresholds=thresholds,auc_score=auc_score,y_true=y_true,y_prediction=y_prediction)
     # torch.save(model.state_dict(), f"{checkpoint}chk_{classification}_{accuracy:.3f}.pth")
 
 #Plots-----------------------------------------------------------------------------
@@ -215,10 +217,11 @@ if __name__ == '__main__':
     plt.show()
 
     fig, ax = plt.subplots(figsize=(10,8))  
-    sns.heatmap(cm, annot=True, ax = ax, fmt='.2g',cmap='Blues',annot_kws={"fontsize":18});  
-    ax.set_xlabel('Predicted labels',fontsize=20);ax.set_ylabel('True labels',fontsize=20);   
-    ax.set_title('Confusion Matrix',fontsize=20);  
-    ax.xaxis.set_ticklabels(['Good', 'Bad'],fontsize=18); ax.yaxis.set_ticklabels(['Good', 'Bad'],fontsize=18);
+    sns.heatmap(cm, annot=True, ax = ax, fmt='.2g',cmap='Blues',annot_kws={"fontsize":18})  
+    ax.set_xlabel('Predicted',fontsize=20)
+    ax.set_ylabel('True',fontsize=20)
+    ax.set_title('Confusion Matrix',fontsize=20)
+    ax.xaxis.set_ticklabels(['Good', 'Bad'],fontsize=18); ax.yaxis.set_ticklabels(['Good', 'Bad'],fontsize=18)
     plt.show()
 
     fig, ax = plt.subplots(figsize=(10,8))  

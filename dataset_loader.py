@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import random
 from torch.utils.data import Dataset
 from torch_geometric.data import Data
 from torchvision import transforms
@@ -62,6 +63,8 @@ class ACERTA_FP(Dataset):
             labels_dict[common_ids[n]] = enc_ids[n] 
 
         train_ids, test_ids = self.split_train_test(common_ids,size=split)
+
+
 
         if self.set == 'training':
             if input_type == 'betas':
@@ -390,6 +393,8 @@ class ACERTA_reading(Dataset):
 
 
     def process_betas_reading_dataset(self,file_task,sub_list,ids,labels,adj_rst,condition):
+        
+        print("Loading Betas {} dataset".format(self.set))
         dataset = []
      
         if condition == 'irr':
@@ -412,7 +417,7 @@ class ACERTA_reading(Dataset):
             elif sub_list[ids[n]][1] == 2:
                 visit = 'visit2'
             
-            # print("Sub id {}\nVisit {}".format(sub_id,visit))
+            print("Loading Sub id {}-{}".format(sub_id,visit))
             
             features = file_task[visit][sub_id]['betas_rois'][:]
 
@@ -462,29 +467,28 @@ class ACERTA_reading(Dataset):
             elif sub_list[ids[n]][1] == 2:
                 visit = 'visit2'
                 
-            print("Loading subject: ",sub_id)
-            for visit in ['visit1','visit2']:
-                features = file_task[sub_id][visit]['psc'][:]
-                #z-score normalization:
-                features =  (features - np.mean(features)) / np.std(features)
+            print("Loading Sub id {}-{}".format(sub_id,visit))
+            features = file_task[sub_id][visit]['psc'][:]
+            #z-score normalization:
+            features =  (features - np.mean(features)) / np.std(features)
 
-                for onset_time in stim_times:
-                    feature = []
+            for onset_time in stim_times:
+                feature = []
 
-                    for timestamp in range(onset_time,onset_time+window_t):
-                        feature.append(features[timestamp])
-                    feature = np.swapaxes(feature,0,1)
-                    feature = torch.FloatTensor(feature)
+                for timestamp in range(onset_time,onset_time+window_t):
+                    feature.append(features[timestamp])
+                feature = np.swapaxes(feature,0,1)
+                feature = torch.FloatTensor(feature)
 
-                    #TODO remove baseline
+                #TODO remove baseline
 
-                    data = Data(x=feature, edge_index=adj_rst._indices(), 
-                                edge_attr=adj_rst._values(),label=labels[n])
-                    data.id = (sub_id, visit)
-                    data.time = onset_time
-                    dataset.append({
-                        'graph': data
-                    })
+                data = Data(x=feature, edge_index=adj_rst._indices(), 
+                            edge_attr=adj_rst._values(),label=labels[n])
+                data.id = (sub_id, visit)
+                data.time = onset_time
+                dataset.append({
+                    'graph': data
+                })
 
         return dataset
 
@@ -504,6 +508,13 @@ class ACERTA_reading(Dataset):
         common_mau_v1 = self.common_elements(mau_task_v1,mau_rst_v1)
         common_mau_v2 = self.common_elements(mau_task_v2,mau_rst_v2)
 
+        #prune overrepresented dataset
+        for n in range(6):
+            to_remove_v1 = random.choice(common_mau_v1)
+            common_mau_v1.remove(to_remove_v1)
+            to_remove_v2 = random.choice(common_mau_v2)
+            common_mau_v2.remove(to_remove_v2)
+
         #make labels and visit labels for stratification
         labels = [0]*(len(common_bom_v1)+len(common_bom_v2)) + [1]*(len(common_mau_v1)+len(common_mau_v2))
         visit_labels = [1]*len(common_bom_v1)+[2]*len(common_bom_v2)+[1]*len(common_mau_v1)+[2]*len(common_mau_v2)
@@ -514,7 +525,8 @@ class ACERTA_reading(Dataset):
 
         id_numbers = list(range(len(sub_ids)))
 
-        train_ids, test_ids, train_labels, test_labels = train_test_split(id_numbers, labels, stratify=labels,train_size=self.split)
+        train_ids, test_ids, train_labels, test_labels = train_test_split(id_numbers, labels, stratify=labels,\
+                                                                            train_size=self.split,random_state=60)
 
         sub_list = []
         for n in id_numbers:

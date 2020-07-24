@@ -288,13 +288,13 @@ class GeoChebyConv(nn.Module):
         self.dropout = dropout
 
         self.classifier = nn.Sequential(
-            nn.Linear(268, 60),
+            nn.Linear(268, 50),
             nn.ReLU(),
             nn.Dropout(),
             # nn.Linear(100, 1),
             # nn.ReLU(),
             # nn.Dropout(),
-            nn.Linear(60, 1),
+            nn.Linear(50, 1),
         )
 
     def forward_single(self, data):
