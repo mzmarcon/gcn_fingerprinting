@@ -67,10 +67,10 @@ if __name__ == '__main__':
     visit1_paths = glob(task_path + 'visit1/Full_Fstat/*nii.gz')
     visit2_paths = glob(task_path + 'visit2/Full_Fstat/*nii.gz')
     
-    cc200_path = '/home/marcon/datasets/acerta_data/Masks/rm_group_mean_tcorr_cluster_200.nii.gz'
-    cc200_coords = plotting.find_parcellation_cut_coords(labels_img=cc200_path)
+    shen268_path = '/home/marcon/datasets/acerta_data/Masks/shen_1mm_268_resampled.nii.gz'
+    shen268_coords = plotting.find_parcellation_cut_coords(labels_img=shen268_path)
 
-    regions_v1 = extract_region_values(visit1_paths,cc200_path)
-    regions_v2 = extract_region_values(visit2_paths,cc200_path)
+    regions_v1 = extract_region_values(visit1_paths,shen268_path)
+    regions_v2 = extract_region_values(visit2_paths,shen268_path)
 
-    create_hd5(visit1_paths,visit2_paths,regions_v1,regions_v2,cc200_coords)
+    create_hd5(visit1_paths,visit2_paths,regions_v1,regions_v2,shen268_coords)

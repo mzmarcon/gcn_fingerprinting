@@ -14,16 +14,16 @@ from glob import glob
 
 
 class ACERTA_FP(Dataset):
-    def __init__(self, set_split, split=0.8, input_type='betas', condition='None', adj_threshold=0.0):
+    def __init__(self, set_split, windowed, window_size, window_overlay, split=0.8, input_type='betas', condition='None', adj_threshold=0.0):
         self.set = set_split
 
         data_path = 'data/'
         rst_data_file = data_path + 'rst_cn_data.hdf5'
+        rst_timeseries = data_path + 'RST_timeseries_pruned.hdf5'
         betas_data_file = data_path + 'betas_data.hdf5'
         psc_data_file = data_path + 'shen_psc_task_schools.hdf5'
         stimuli_path = data_path + 'stimuli2/'
                 
-
         if input_type == 'betas':
             file_rst = h5py.File(rst_data_file, 'r')
             file_task = h5py.File(betas_data_file, 'r')
@@ -49,9 +49,18 @@ class ACERTA_FP(Dataset):
                 if 'visit2' in list(file_task[subject].keys()):
                     ids_task_v2.append(subject)
 
-        common_v1 = self.common_elements(ids_rst_v1,ids_task_v1) 
-        common_v2 = self.common_elements(ids_rst_v2,ids_task_v2)
-        common_ids = self.common_elements(common_v1,common_v2)
+        elif input_type == 'RST':
+            file_rst = h5py.File(rst_data_file, 'r')
+            file_task = h5py.File(rst_timeseries, 'r')
+         
+            ids_rst_v1 = list(file_rst['visit1'].keys())
+            ids_rst_v2 = list(file_rst['visit2'].keys())
+            ids_task_v1 = list(file_task['visit1'].keys())
+            ids_task_v2 = list(file_task['visit2'].keys())
+
+        common_v1 = list(set(ids_rst_v1).intersection(ids_task_v1))
+        common_v2 = list(set(ids_rst_v2).intersection(ids_task_v2))
+        common_ids = list(set(common_v1).intersection(common_v2))
 
         adj_rst = self.generate_mean_adj(file_rst,common_ids,threshold=adj_threshold)
 
@@ -64,21 +73,22 @@ class ACERTA_FP(Dataset):
 
         train_ids, test_ids = self.split_train_test(common_ids,size=split)
 
-
-
         if self.set == 'training':
             if input_type == 'betas':
                 self.dataset = self.process_betas_condition_dataset(file_task,train_ids,labels_dict,adj_rst,condition)
-            if input_type == 'PSC':
+            elif input_type == 'PSC':
                 self.dataset = self.process_psc_dataset(file_task,stimuli_path,train_ids,labels_dict,adj_rst,condition=condition)
+            elif input_type == 'RST':
+                self.dataset = self.process_RST_dataset(file_task,stimuli_path,train_ids,labels_dict,adj_rst,windowed, window_size, window_overlay)
 
 
         if self.set == 'test':
             if input_type == 'betas':
                 self.dataset = self.process_betas_condition_dataset(file_task,test_ids,labels_dict,adj_rst,condition)
-            if input_type == 'PSC':
+            elif input_type == 'PSC':
                 self.dataset = self.process_psc_dataset(file_task,stimuli_path,test_ids,labels_dict,adj_rst,condition=condition)
-
+            elif input_type == 'RST':
+                self.dataset = self.process_RST_dataset(file_task,stimuli_path,test_ids,labels_dict,adj_rst,windowed, window_size, window_overlay)
 
     def __getitem__(self, idx):
 
@@ -115,15 +125,6 @@ class ACERTA_FP(Dataset):
 
     def __len__(self):
         return len(self.dataset)
-
-
-    def common_elements(self,list1,list2):
-        common = [] 
-        for item in list1: 
-            if item in list2: 
-                common.append(item)  
-        return common
-
 
     def split_train_test(self,id_list,size=0.8,random_seed=42):
         np.random.seed(random_seed)
@@ -237,9 +238,10 @@ class ACERTA_FP(Dataset):
             for visit in ['visit1','visit2']:
                 features = file_task[subject_id][visit]['psc'][:]
                 #z-score normalization:
-                features =  (features - np.mean(features)) / np.std(features)
+                # features =  (features - np.mean(features)) / np.std(features)
 
                 for onset_time in stim_times:
+                    onset_time = onset_time+2
                     feature = []
 
                     for timestamp in range(onset_time,onset_time+window_t):
@@ -253,6 +255,60 @@ class ACERTA_FP(Dataset):
                                 edge_attr=adj_rst._values(),label=torch.LongTensor(labels_dict[subject_id]))
                     data.id = (subject_id, visit)
                     data.time = onset_time
+                    dataset.append({
+                        'graph': data
+                    })
+
+        for n_anchor in range(len(dataset)): #get matching example indices for each example
+            matching_ids = []
+            for n_pair in range(len(dataset)):
+                if not n_anchor == n_pair:  #remove self loops
+                    if dataset[n_anchor]['graph']['id'][0] ==  dataset[n_pair]['graph']['id'][0]: #check same id
+                        if not dataset[n_anchor]['graph']['id'][1] ==  dataset[n_pair]['graph']['id'][1]: #force visit1to2
+                            matching_ids.append(n_pair)
+
+            dataset[n_anchor]['matching_idx'] = matching_ids
+
+        return dataset
+
+    def process_RST_dataset(self,file_timeseries,stimuli_path,ids,labels_dict,adj_rst, windowed, window_size=25, window_ovelay=15):
+
+        print("Loading RST dataset")
+        dataset = []
+
+        for subject_id in ids:
+            print("Loading subject: ",subject_id)
+            for visit in ['visit1','visit2']:
+                features = file_timeseries[visit][subject_id]['timeseries'][:]
+        
+                if windowed:
+                    #break timeseries in patches
+                    size = len(features)
+                    patches = np.arange(0,size,window_size)
+
+                    #get multiple overlaid patch examples from timeseries
+                    for patch in patches[1:]:
+                        feature = []
+                        feature.append(features[patch-window_ovelay:patch+window_ovelay])
+
+                        feature = torch.FloatTensor(feature)
+                        feature = np.swapaxes(feature,1,2)
+
+                        data = Data(x=feature.squeeze(0), edge_index=adj_rst._indices(), 
+                                    edge_attr=adj_rst._values(),label=torch.LongTensor(labels_dict[subject_id]))
+                        data.id = (subject_id, visit)
+                        data.time = patch
+                        dataset.append({
+                            'graph': data
+                        })
+
+                else:
+                    feature = torch.FloatTensor(features)
+                    feature = np.swapaxes(feature,0,1)
+
+                    data = Data(x=feature.squeeze(0), edge_index=adj_rst._indices(), 
+                                edge_attr=adj_rst._values(),label=torch.LongTensor(labels_dict[subject_id]))
+                    data.id = (subject_id, visit)
                     dataset.append({
                         'graph': data
                     })
@@ -383,15 +439,6 @@ class ACERTA_reading(Dataset):
     def __len__(self):
         return len(self.dataset)
 
-
-    def common_elements(self,list1,list2):
-        common = [] 
-        for item in list1: 
-            if item in list2: 
-                common.append(item)  
-        return common
-
-
     def process_betas_reading_dataset(self,file_task,sub_list,ids,labels,adj_rst,condition):
         
         print("Loading Betas {} dataset".format(self.set))
@@ -436,7 +483,7 @@ class ACERTA_reading(Dataset):
 
         return dataset
 
-    def process_psc_reading_dataset(self,file_task,stimuli_path,sub_list,ids,labels,adj_rst,window_t=7,condition='all',remove_baseline=False):
+    def process_psc_reading_dataset(self,file_task,stimuli_path,sub_list,ids,labels,adj_rst,window_t=12,condition='all',remove_baseline=False):
 
         print("Loading PSC {} dataset".format(self.set))
         dataset = []
@@ -470,7 +517,7 @@ class ACERTA_reading(Dataset):
             print("Loading Sub id {}-{}".format(sub_id,visit))
             features = file_task[sub_id][visit]['psc'][:]
             #z-score normalization:
-            features =  (features - np.mean(features)) / np.std(features)
+            # features =  (features - np.mean(features)) / np.std(features)
 
             for onset_time in stim_times:
                 feature = []
@@ -493,59 +540,50 @@ class ACERTA_reading(Dataset):
         return dataset
 
     def get_labels_READING(self, ids_rst_v1,ids_rst_v2,ids_task_v1,ids_task_v2):
-        bom_rst_v1 = self.get_reading_classes(ids_rst_v1,class_type='B') 
-        bom_rst_v2 = self.get_reading_classes(ids_rst_v2,class_type='B') 
-        bom_task_v1 = self.get_reading_classes(ids_task_v1,class_type='B') 
-        bom_task_v2 = self.get_reading_classes(ids_task_v2,class_type='B') 
+        good_rst_v1 = [id_ for id_ in ids_rst_v1 if 'B' in id_] 
+        good_rst_v2 = [id_ for id_ in ids_rst_v2 if 'B' in id_] 
+        good_task_v1 = [id_ for id_ in ids_task_v1 if 'B' in id_] 
+        good_task_v2 = [id_ for id_ in ids_task_v2 if 'B' in id_] 
 
-        mau_rst_v1 = self.get_reading_classes(ids_rst_v1,class_type='M') 
-        mau_rst_v2 = self.get_reading_classes(ids_rst_v2,class_type='M') 
-        mau_task_v1 = self.get_reading_classes(ids_task_v1,class_type='M') 
-        mau_task_v2 = self.get_reading_classes(ids_task_v2,class_type='M') 
+        bad_rst_v1 = [id_ for id_ in ids_rst_v1 if 'M' in id_] 
+        bad_rst_v2 = [id_ for id_ in ids_rst_v2 if 'M' in id_] 
+        bad_task_v1 = [id_ for id_ in ids_task_v1 if 'M' in id_] 
+        bad_task_v2 = [id_ for id_ in ids_task_v2 if 'M' in id_] 
 
-        common_bom_v1 = self.common_elements(bom_task_v1,bom_rst_v1)
-        common_bom_v2 = self.common_elements(bom_task_v2,bom_rst_v2)
-        common_mau_v1 = self.common_elements(mau_task_v1,mau_rst_v1)
-        common_mau_v2 = self.common_elements(mau_task_v2,mau_rst_v2)
+        common_good_v1 = list(set(good_task_v1).intersection(good_rst_v1))
+        common_good_v2 = list(set(good_task_v2).intersection(good_rst_v2))
+        common_bad_v1 = list(set(bad_task_v1).intersection(bad_rst_v1))
+        common_bad_v2 = list(set(bad_task_v2).intersection(bad_rst_v2))
 
         #prune overrepresented dataset
         for n in range(6):
-            to_remove_v1 = random.choice(common_mau_v1)
-            common_mau_v1.remove(to_remove_v1)
-            to_remove_v2 = random.choice(common_mau_v2)
-            common_mau_v2.remove(to_remove_v2)
+            to_remove_v1 = random.choice(common_bad_v1)
+            common_bad_v1.remove(to_remove_v1)
+            to_remove_v2 = random.choice(common_bad_v2)
+            common_bad_v2.remove(to_remove_v2)
 
         #make labels and visit labels for stratification
-        labels = [0]*(len(common_bom_v1)+len(common_bom_v2)) + [1]*(len(common_mau_v1)+len(common_mau_v2))
-        visit_labels = [1]*len(common_bom_v1)+[2]*len(common_bom_v2)+[1]*len(common_mau_v1)+[2]*len(common_mau_v2)
+        labels = [0]*(len(common_good_v1)+len(common_good_v2)) + [1]*(len(common_bad_v1)+len(common_bad_v2))
+        visit_labels = [1]*len(common_good_v1)+[2]*len(common_good_v2)+[1]*len(common_bad_v1)+[2]*len(common_bad_v2)
 
-        bom_ids = common_bom_v1 + common_bom_v2
-        mau_ids = common_mau_v1 + common_mau_v2
-        sub_ids = bom_ids + mau_ids
+        good_ids = common_good_v1 + common_good_v2
+        bad_ids = common_bad_v1 + common_bad_v2
+        sub_ids = good_ids + bad_ids
 
         id_numbers = list(range(len(sub_ids)))
 
         train_ids, test_ids, train_labels, test_labels = train_test_split(id_numbers, labels, stratify=labels,\
-                                                                            train_size=self.split,random_state=60)
+                                                                            train_size=self.split,random_state=8)
 
         sub_list = []
         for n in id_numbers:
             sub_list.append((sub_ids[n],visit_labels[n]))
 
         #generate adjaency
-        ids_v1 = common_bom_v1 + common_mau_v1
-        ids_v2 = common_bom_v2 + common_mau_v2
+        ids_v1 = common_good_v1 + common_bad_v1
+        ids_v2 = common_good_v2 + common_bad_v2
 
         return sub_list, ids_v1, ids_v2, train_ids, test_ids, train_labels, test_labels
-
-
-    def get_reading_classes(self, ids_list, class_type='B'):
-        class_list = []
-        for item in ids_list:
-            if class_type in item:
-                class_list.append(item)
-                
-        return class_list
 
     def generate_mean_adj(self,file_rst,ids_v1,ids_v2,threshold):
         cn_matrix_list = []

@@ -99,6 +99,8 @@ if __name__ == '__main__':
                                 weight_decay=args.weight_decay)
     if args.scheduler:
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.5,patience=10,min_lr=1e-6)
+        # lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
+        #                                 milestones=[5,30,50,80,150], gamma=0.5)
 #Training-----------------------------------------------------------------------------
 
     counter=0
@@ -135,6 +137,7 @@ if __name__ == '__main__':
         training_losses.append(epoch_loss)
         if args.scheduler:
             lr_scheduler.step(np.mean(epoch_loss))
+            # lr_scheduler.step()
 
 #Testing-----------------------------------------------------------------------------
         model.eval()
@@ -196,9 +199,12 @@ if __name__ == '__main__':
             cm=cm,fpr=fpr,tpr=tpr,thresholds=thresholds,auc_score=auc_score,y_true=y_true,y_prediction=y_prediction)
     # torch.save(model.state_dict(), f"{checkpoint}chk_{classification}_{accuracy:.3f}.pth")
 
+# run main_reading.py --model gcn_single --lr 5e-5 --epochs 200 --training_batch 4 --hidden 16 --condition ps
+#    ...: e --split 0.8 --input_type PSC --adj_threshold 0.7 --dropout 0.6  
+
 #Plots-----------------------------------------------------------------------------
 
-    fig = plt.figure(figsize=(10,8))
+    fig, ax = plt.subplots(figsize=(10,8))
     plt.plot(range(counter),np.mean(training_losses,axis=1), label='Training loss')
     plt.plot(range(counter),np.mean(test_losses,axis=1), label='Validation loss')
     plt.title('BCE Loss',fontsize=20)
@@ -206,14 +212,22 @@ if __name__ == '__main__':
     plt.ylabel('Loss',fontsize=20)
     plt.legend(prop={'size': 16})
     plt.grid()
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
     plt.show()
 
-    fig = plt.figure(figsize=(10,8))
+    fig, ax = plt.subplots(figsize=(10,8))
     plt.plot(range(e+1),accuracy_list)
     plt.title('Accuracy per epoch',fontsize=20)
     plt.xlabel('Epoch',fontsize=20)
     plt.ylabel('Accuracy',fontsize=20)
     plt.grid()
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
     plt.show()
 
     fig, ax = plt.subplots(figsize=(10,8))  

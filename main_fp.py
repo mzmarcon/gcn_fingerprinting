@@ -25,9 +25,9 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_type', type=str, default='PSC',
-                        help='Type of feature data input', choices=['PSC','betas'])   
-    parser.add_argument('--condition', type=str, default='all',
-                        help='Task condition used as input', choices=['reg','irr','pse','all'])
+                        help='Type of feature data input', choices=['PSC','betas','RST'])   
+    parser.add_argument('--condition', type=str, default='none',
+                        help='Task condition used as input', choices=['reg','irr','pse','all','none'])
     parser.add_argument('--split', type=float, default=0.8,
                         help='Size of training set')
     parser.add_argument('--adj_threshold', type=float, default='0.5',
@@ -52,15 +52,21 @@ if __name__ == '__main__':
                         help='Number of epochs')
     parser.add_argument('--early_stop', type=int, default=99,
                         help='Epochs for early stop')
-    parser.add_argument('--scheduler', type=bool, default=False,
+    parser.add_argument('--no_scheduler', action='store_false',
                         help='Whether to use learning rate scheduler')
+    parser.add_argument('--no_windowed', action='store_false',
+                        help='Whether split RST features in patches')
+    parser.add_argument('--window_size', type=int, default=20,
+                        help='Window starting points')
+    parser.add_argument('--window_overlay', type=int, default=8,
+                        help='Windoq overlay size')
     args = parser.parse_args()
 
 
-    training_set = ACERTA_FP(set_split='training', split=args.split, input_type=args.input_type,
-                            condition=args.condition, adj_threshold=args.adj_threshold)
-    test_set = ACERTA_FP(set_split='test', split=args.split, input_type=args.input_type,
-                            condition=args.condition, adj_threshold=args.adj_threshold)
+    training_set = ACERTA_FP(set_split='training', split=args.split, windowed=args.no_windowed, window_size=args.window_size, window_overlay=args.window_overlay,
+                            input_type=args.input_type, condition=args.condition, adj_threshold=args.adj_threshold)
+    test_set = ACERTA_FP(set_split='test', split=args.split, windowed=args.no_windowed, window_size=args.window_size, window_overlay=args.window_overlay,
+                             input_type=args.input_type, condition=args.condition, adj_threshold=args.adj_threshold)
     
     train_loader = DataLoader(training_set, shuffle=True, drop_last=True,
                                 batch_size=args.training_batch)
@@ -70,7 +76,17 @@ if __name__ == '__main__':
 
     nfeat = train_loader.__iter__().__next__()['input_anchor']['x'].shape[1]
     print("NFEAT: ",nfeat)
+    if args.no_scheduler: 
+        print("Scheduler: on")
+    else:
+        print("Scheduler: off")
     
+    if args.no_windowed: 
+        print("Window: on")
+    else:
+        print("Window: off")
+
+
     if args.model == 'sage':
         model = Siamese_GeoSAGEConv(nfeat=nfeat,
                             nhid=args.hidden,
@@ -95,10 +111,10 @@ if __name__ == '__main__':
     
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
                                 weight_decay=args.weight_decay)
-    if args.scheduler:
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-                                                milestones=[20,60,100,150,450,1000,1500], gamma=0.5)
-
+    if args.no_scheduler:
+        # lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
+        #                                         milestones=[20,60,100,150,450,1000,1500], gamma=0.5)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.25,patience=10,min_lr=1e-6)
 #Training-----------------------------------------------------------------------------
 
     delta_loss = defaultdict(list)
@@ -133,8 +149,9 @@ if __name__ == '__main__':
 
         counter += 1
         training_losses.append(epoch_loss)
-        if args.scheduler:
-            lr_scheduler.step()
+        if args.no_scheduler:
+            # lr_scheduler.step()
+            lr_scheduler.step(np.mean(epoch_loss))
 
 #Testing-----------------------------------------------------------------------------
         model.eval()
