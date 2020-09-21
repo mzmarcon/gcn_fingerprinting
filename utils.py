@@ -5,6 +5,7 @@ import torch
 from scipy import sparse
 from scipy.sparse.linalg.eigen.arpack import eigsh
 import torch.nn.functional as F
+import torch.nn as nn
 
 def get_adjacency(cn_matrix, threshold):
     # mask = (cn_matrix > np.percentile(cn_matrix, threshold)).astype(np.uint8)
@@ -69,6 +70,17 @@ def sparse_to_tuple(sparse_mx):
 
     return sparse_mx
 
+def select_pairs(batch_data):
+    """
+    Find pairs within a mini-batch for nt_xent loss.
+    """
+    ids = [item[0] for item in batch_data['input_anchor']['id']] + [item[0] for item in batch_data['input_positive']['id']] + [item[0] for item in batch_data['input_negative']['id']]
+    pairs=[]
+    for i,_ in enumerate(ids): 
+        pairs.append([j for j,_ in enumerate(ids) if ids[i]==ids[j]])   
+    return pairs
+
+
 class ContrastiveLoss(torch.nn.Module):
     """
     Contrastive loss function.
@@ -80,7 +92,6 @@ class ContrastiveLoss(torch.nn.Module):
         self.margin = margin
 
     def forward(self, output1, output2, label):
-
         label = label[0]
         loss_list = []
         for n in range(len(output1)):
@@ -94,25 +105,38 @@ class ContrastiveLoss(torch.nn.Module):
         return loss
 
 
-
-class GlobalLoss(torch.nn.Module):
+class ContrastiveCosineLoss(torch.nn.Module):
     """
-    Global Loss function
-    Based on: Kumar et. al
+    Based on NT_Xent Loss from SimCLR. 
     """
 
-    def __init__(self, margin=1.0, lamda=1.0):
-        super(GlobalLoss, self).__init__()
-        self.margin = margin
-        self.lamda = lamda
+    def __init__(self, temperature=1.0):
+        super(ContrastiveCosineLoss, self).__init__()
+        self.temperature = temperature
 
-    def forward(self, positive_list, negative_list):
+    def nt_xent(self, output, anchor_n, pair_pos, pair_neg):
+        dist = nn.CosineSimilarity()
+        loss = []
+        for pos_item in pair_pos:
+            #compute sum of similarities between each positive pair and all negatives pairs
+            neg_sim = torch.sum(torch.stack([torch.exp(dist(output[pos_item],output[neg_item])/self.temperature) for neg_item in pair_neg]))
+            pos_sim = torch.exp(dist(output[anchor_n],output[pos_item])/self.temperature)    
+            nt_xent = -1 * torch.log(pos_sim / (pos_sim + neg_sim))
+            loss.append(nt_xent)
+        
+        return torch.mean(torch.stack(loss))
 
-        mean_pos = torch.mean(torch.stack(positive_list))
-        mean_neg = torch.mean(torch.stack(negative_list))
-        var_pos = torch.var(torch.stack(positive_list))
-        var_neg = torch.var(torch.stack(negative_list))
+    def forward(self, output_anchor, output_pos, output_neg, pairs):
+        loss_batch = []
+        output = torch.cat((output_anchor, output_pos, output_neg))
+        set_size = set(range(output.shape[0]))
+        for n in range(len(output)):
+            pair_pos = set(pairs[0]).difference([n])
+            pair_neg = set_size.difference(pairs[n])
 
-        global_loss = (var_pos + var_neg) + self.lamda * torch.clamp(self.margin - (mean_pos - mean_neg), min=0.0)
+            loss = self.nt_xent(output,n,pair_pos,pair_neg)
+            loss_batch.append(loss)
+        
+        loss = torch.mean(torch.stack(loss_batch,dim=0))
 
-        return global_loss
+        return loss

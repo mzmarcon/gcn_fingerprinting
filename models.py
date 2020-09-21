@@ -34,10 +34,6 @@ class Siamese_GeoChebyConv(nn.Module):
         BatchNorm(16)
         X = F.relu(x)
         x = F.dropout(x, self.dropout, training=self.training)
-        # x = F.relu(self.gc2(x, edge_index=data['edge_index'], edge_weight=data['edge_attr']))
-        # x = F.dropout(x, self.dropout, training=self.training)
-        # x = F.relu(self.gc3(x, edge_index=data['edge_index'], edge_weight=data['edge_attr']))
-        # x = F.dropout(x, self.dropout, training=self.training)
         x = self.gc4(x, edge_index=data['edge_index'], edge_weight=data['edge_attr'])
         return x
 
@@ -66,15 +62,15 @@ class Siamese_GeoChebyConv(nn.Module):
         return output1, output2
 
 
-class Siamese_GlobalCheby(nn.Module):
+class Siamese_GeoCheby_Cos(nn.Module):
     def __init__(self, nfeat, nhid, nclass, dropout):
-        super(Siamese_GlobalCheby,self).__init__()
+        super(Siamese_GeoCheby_Cos,self).__init__()
 
         K = 3
         nclass = int(nclass)
         self.gc1 = ChebConv(nfeat, nhid, K)
-        self.gc2 = ChebConv(nhid, 2*nhid, K)
-        self.gc3 = ChebConv(2*nhid, nhid, K)
+        self.gc2 = ChebConv(nhid, nhid, K)
+        self.gc3 = ChebConv(nhid, nhid, K)
         self.gc4 = ChebConv(nhid, nclass, K)
         self.dropout = dropout
 
@@ -83,29 +79,46 @@ class Siamese_GlobalCheby(nn.Module):
             nn.ReLU(),
             nn.Dropout(),
             nn.Linear(100, 60),
-            # nn.ReLU(),
-            # nn.Dropout(),
-            # nn.Linear(50, 10),
-            nn.Sigmoid()
         )
 
     def forward_single(self, data):
-        x = F.relu(self.gc1(data['x'], edge_index=data['edge_index'], edge_weight=data['edge_attr']))
+        x = self.gc1(data['x'], edge_index=data['edge_index'], edge_weight=data['edge_attr'])
+        BatchNorm(8)
+        X = F.relu(x)
         x = F.dropout(x, self.dropout, training=self.training)
-        x = F.relu(self.gc4(x, edge_index=data['edge_index'], edge_weight=data['edge_attr']))
+        x = self.gc4(x, edge_index=data['edge_index'], edge_weight=data['edge_attr'])
         return x
 
-    def forward(self, data1, data2):
-        out1 = self.forward_single(data1)
-        out2 = self.forward_single(data2)
+    def forward(self, data1, data2, data3):
+        data1_graphs = data1.to_data_list()
+        data2_graphs = data2.to_data_list()
+        data3_graphs = data3.to_data_list()
 
-        out1 = self.classifier(out1.T)
-        out2 = self.classifier(out2.T)
+        outs1 = []
+        outs2 = []
+        outs3 = []
+        for graph_num in range(data1.num_graphs):
+            input1 = data1_graphs[graph_num]
+            input2 = data2_graphs[graph_num]
+            input3 = data3_graphs[graph_num]
+            
+            conv_out1 = self.forward_single(input1)
+            conv_out2 = self.forward_single(input2)
+            conv_out3 = self.forward_single(input3)
 
-        similarity = F.pairwise_distance(out1, out2)
+            dense_out1 = self.classifier(conv_out1.T)
+            dense_out2 = self.classifier(conv_out2.T)
+            dense_out3 = self.classifier(conv_out3.T)
 
-        return similarity
+            outs1.append(dense_out1)
+            outs2.append(dense_out2)
+            outs3.append(dense_out3)
 
+        output1 = torch.stack(outs1,dim=0)
+        output2 = torch.stack(outs2,dim=0)
+        output3 = torch.stack(outs3,dim=0)
+
+        return output1, output2, output3
 
 class Siamese_GeoChebyConv_Read(nn.Module):
     def __init__(self, nfeat, nhid, nclass, dropout):
