@@ -121,7 +121,7 @@ class ContrastiveCosineLoss(torch.nn.Module):
             #compute sum of similarities between each positive pair and all negatives pairs
             neg_sim = torch.sum(torch.stack([torch.exp(dist(output[pos_item],output[neg_item])/self.temperature) for neg_item in pair_neg]))
             pos_sim = torch.exp(dist(output[anchor_n],output[pos_item])/self.temperature)    
-            nt_xent = -1 * torch.log(pos_sim / (pos_sim + neg_sim))
+            nt_xent = -1 * torch.log(pos_sim / neg_sim)
             loss.append(nt_xent)
         
         return torch.mean(torch.stack(loss))
@@ -140,3 +140,5 @@ class ContrastiveCosineLoss(torch.nn.Module):
         loss = torch.mean(torch.stack(loss_batch,dim=0))
 
         return loss
+
+

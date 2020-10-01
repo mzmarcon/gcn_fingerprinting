@@ -36,20 +36,22 @@ if __name__ == '__main__':
                         help='Number of hidden layers')
     parser.add_argument('--training_batch', type=int, default=8,
                         help='Training batch size')
-    parser.add_argument('--test_batch', type=int, default=1,
+    parser.add_argument('--test_batch', type=int, default=8,
                         help='Test batch size')
-    parser.add_argument('--lr', type=float, default=1e-6,
+    parser.add_argument('--lr', type=float, default=5e-5,
                         help='Initial learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-1,
                         help='Weight decay magnitude')
     parser.add_argument('--dropout', type=float, default=0.5,
                         help='Dropout magnitude')
-    parser.add_argument('--epochs', type=int, default=20,
+    parser.add_argument('--epochs', type=int, default=100,
                         help='Number of epochs')
     parser.add_argument('--early_stop', type=int, default=99,
                         help='Epochs for early stop')
     parser.add_argument('--no_scheduler', action='store_false',
                         help='Whether to use learning rate scheduler')
+    parser.add_argument('--patience', type=int, default=6,
+                        help='Scheduler update patience.')
     #Loss function arguments
     parser.add_argument('--loss_margin', type=float, default=0.2,
                         help='Margin for Contrastive Loss function')
@@ -85,12 +87,6 @@ if __name__ == '__main__':
     print("Scheduler: On") if args.no_scheduler else print("Scheduler: Off")
     if not args.no_windowed and args.input_type=='RST': print("Window: On")
 
-    if args.model == 'sage':
-        model = Siamese_GeoSAGEConv(nfeat=nfeat,
-                            nhid=args.hidden,
-                            nclass=1,
-                            dropout=args.dropout)
-        criterion = ContrastiveLoss(args.loss_margin)
 
     elif args.model == 'gcn_cheby':
         model = Siamese_GeoChebyConv(nfeat=nfeat,
@@ -119,7 +115,7 @@ if __name__ == '__main__':
                                 weight_decay=args.weight_decay)
     if args.no_scheduler:
         # lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,milestones=[20,60,100,150,450,1000,1500], gamma=0.5)
-        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.25,patience=10,min_lr=1e-6)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.1,patience=args.patience,min_lr=1e-6)
 
 #Training-----------------------------------------------------------------------------
 
@@ -202,10 +198,21 @@ if __name__ == '__main__':
                 elif args.model == 'gcn_cheby_cos':
                     input_pos_test = data_test['input_positive'].to(device)
                     input_neg_test = data_test['input_negative'].to(device)
+                    label_test = data_test['label'].to(device)
+
                     pairs_test = select_pairs(data_test)
                     out_anchor_test, out_pos_test, out_neg_test = model(input_anchor_test,input_pos_test,input_neg_test)
                     test_loss = criterion(out_anchor_test, out_pos_test, out_neg_test, pairs_test)
 
+                    #predict
+                    for n,_ in enumerate(out_anchor_test):
+                        sim_positive = nn.CosineSimilarity()(out_anchor_test[n],out_pos_test[n])
+                        sim_negative = nn.CosineSimilarity()(out_anchor_test[n],out_neg_test[n])
+                        if sim_positive > sim_negative:
+                            correct += 1
+
+                    # y_prediction.extend(prediction)
+                    # y_true.extend(label_test)
 
                 elif args.model == 'gcn_cheby_bce':
                     input_pair_test = data_test['input_pair'].to(device)
@@ -227,7 +234,7 @@ if __name__ == '__main__':
                     y_prediction.append(prediction)
                     y_true.append(label_test)
 
-                examples += 1
+                examples += len(data_test['label'])
                 test_epoch_loss.append(test_loss.item())
             accuracy = correct/examples
             accuracy_list.append(accuracy)

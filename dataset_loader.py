@@ -81,7 +81,6 @@ class ACERTA_FP(Dataset):
             elif input_type == 'RST':
                 self.dataset = self.process_RST_dataset(file_task,stimuli_path,train_ids,labels_dict,adj_rst,windowed, window_size, window_overlay)
 
-
         if self.set == 'test':
             if input_type == 'betas':
                 self.dataset = self.process_betas_condition_dataset(file_task,test_ids,labels_dict,adj_rst,condition)
@@ -100,7 +99,7 @@ class ACERTA_FP(Dataset):
 
         while True:
             n_rnd = np.random.randint(len(self.dataset))    
-            if not n_rnd in [idx] + data_anchor['matching_idx']:
+            if not data_anchor['graph']['id'][0] == self.dataset[n_rnd]['graph']['id'][0]:
                 data_negative = self.dataset[n_rnd]
                 break
 
@@ -411,16 +410,16 @@ class ACERTA_reading(Dataset):
         coin_flip = np.random.randint(0,2)
 
         if coin_flip == 1: #get positive example
-            label = 1 #for cross-entropy.
+            label = 1 #for cross-entropy
             while True:
                 rnd_positive = np.random.randint(len(self.dataset))
                 if self.dataset[rnd_positive]['graph']['label'] == anchor_label: #if label is the same
-                    if not self.dataset[rnd_positive]['graph']['id'] == anchor_id: #if not same id
+                    if not self.dataset[rnd_positive]['graph']['id'] == anchor_id: #if not same id and visit
                         data_pair=self.dataset[rnd_positive]
                         break
 
         elif coin_flip == 0: #get negative example
-            label = 0
+            label = 0 
             while True:
                 rnd_negative = np.random.randint(len(self.dataset))    
                 if not self.dataset[rnd_negative]['graph']['label'] == anchor_label:
@@ -431,9 +430,7 @@ class ACERTA_reading(Dataset):
             'input_anchor'          : data_anchor['graph'],
             'input_pair'            : data_pair['graph'],
             'label'                 : label,
-            'label_single'          : data_anchor['graph']['label'],
-            'anchor_id'             : data_anchor['graph']['id'],
-            'pair_id'               : data_pair['graph']['id']
+            'label_single'          : data_anchor['graph']['label']
         }
 
     def __len__(self):
@@ -516,8 +513,6 @@ class ACERTA_reading(Dataset):
                 
             print("Loading Sub id {}-{}".format(sub_id,visit))
             features = file_task[sub_id][visit]['psc'][:]
-            #z-score normalization:
-            # features =  (features - np.mean(features)) / np.std(features)
 
             for onset_time in stim_times:
                 feature = []

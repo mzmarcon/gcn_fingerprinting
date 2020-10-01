@@ -78,7 +78,7 @@ class Siamese_GeoCheby_Cos(nn.Module):
             nn.Linear(268, 100),
             nn.ReLU(),
             nn.Dropout(),
-            nn.Linear(100, 60),
+            nn.Linear(100, 60)
         )
 
     def forward_single(self, data):
@@ -176,43 +176,6 @@ class Siamese_GeoChebyConv_Read(nn.Module):
 
         return output
         
-
-class Siamese_HingeCheby(nn.Module):
-    def __init__(self, nfeat, nhid, nclass, dropout):
-        super(Siamese_HingeCheby,self).__init__()
-
-        K = 3
-        nclass = int(nclass)
-        self.gc1 = ChebConv(nfeat, nhid, K)
-        self.gc2 = ChebConv(nhid, 2*nhid, K)
-        self.gc3 = ChebConv(2*nhid, nhid, K)
-        self.gc4 = ChebConv(nhid, nclass, K)
-        self.dropout = dropout
-
-        self.classifier = nn.Sequential(
-            nn.Linear(200, 100),
-            nn.ReLU(),
-            nn.Dropout(),
-            nn.Linear(100, 1),
-            # nn.ReLU(),
-            # nn.Dropout(),
-            # nn.Linear(50, 10),
-        )
-
-    def forward_single(self, data):
-        x = F.relu(self.gc1(data['x'], edge_index=data['edge_index'], edge_weight=data['edge_attr']))
-        x = F.dropout(x, self.dropout, training=self.training)
-        x = F.relu(self.gc4(x, edge_index=data['edge_index'], edge_weight=data['edge_attr']))
-        return x
-
-    def forward(self, data1, data2):
-        out1 = self.forward_single(data1)
-        out2 = self.forward_single(data2)
-        
-        out_product = torch.mul(out1,out2) 
-        out = self.classifier(out_product.T)
-        
-        return out
 
 
 class Siamese_GeoSAGEConv(nn.Module):
