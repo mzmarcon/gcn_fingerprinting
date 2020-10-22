@@ -6,19 +6,22 @@ from scipy import sparse
 from scipy.sparse.linalg.eigen.arpack import eigsh
 import torch.nn.functional as F
 import torch.nn as nn
+from numba import cuda
 
 def get_adjacency(cn_matrix, threshold):
     # mask = (cn_matrix > np.percentile(cn_matrix, threshold)).astype(np.uint8)
     mask = (cn_matrix > threshold).astype(np.uint8)
+    sparse_matrix = cn_matrix * mask
     nodes, neighbors = np.nonzero(mask)
-    sparse_mask = {}
+    sparse_indices = {}
     for i, node in enumerate(nodes):
-        if neighbors[i] > node:
-            if not node in sparse_mask: 
-                sparse_mask[node] = [neighbors[i]]
+        #remove self-loops of indices dict
+        if not neighbors[i] == node:
+            if not node in sparse_indices: 
+                sparse_indices[node] = [neighbors[i]]
             else:
-                sparse_mask[node].append(neighbors[i])
-    return mask, sparse_mask
+                sparse_indices[node].append(neighbors[i])
+    return sparse_matrix, sparse_indices
 
 def chebyshev_polynomials(adj, k):
     """Calculate Chebyshev polynomials up to order k. Return a list of sparse matrices (tuple representation)."""
@@ -115,13 +118,13 @@ class ContrastiveCosineLoss(torch.nn.Module):
         self.temperature = temperature
 
     def nt_xent(self, output, anchor_n, pair_pos, pair_neg):
-        dist = nn.CosineSimilarity()
+        dist = nn.CosineSimilarity()    
         loss = []
         for pos_item in pair_pos:
             #compute sum of similarities between each positive pair and all negatives pairs
-            neg_sim = torch.sum(torch.stack([torch.exp(dist(output[pos_item],output[neg_item])/self.temperature) for neg_item in pair_neg]))
-            pos_sim = torch.exp(dist(output[anchor_n],output[pos_item])/self.temperature)    
-            nt_xent = -1 * torch.log(pos_sim / neg_sim)
+            neg_sim = torch.sum(torch.stack([torch.exp(dist(output[pos_item].unsqueeze(0),output[neg_item].unsqueeze(0))/self.temperature) for neg_item in pair_neg]))
+            pos_sim = torch.exp(dist(output[anchor_n].unsqueeze(0),output[pos_item].unsqueeze(0))/self.temperature)    
+            nt_xent = -1 * torch.log(pos_sim / (pos_sim + neg_sim))
             loss.append(nt_xent)
         
         return torch.mean(torch.stack(loss))

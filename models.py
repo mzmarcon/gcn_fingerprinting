@@ -66,26 +66,37 @@ class Siamese_GeoCheby_Cos(nn.Module):
     def __init__(self, nfeat, nhid, nclass, dropout):
         super(Siamese_GeoCheby_Cos,self).__init__()
 
-        K = 3
+        K = 2
         nclass = int(nclass)
         self.gc1 = ChebConv(nfeat, nhid, K)
-        self.gc2 = ChebConv(nhid, nhid, K)
-        self.gc3 = ChebConv(nhid, nhid, K)
-        self.gc4 = ChebConv(nhid, nclass, K)
+        # self.gc2 = ChebConv(2*nhid, 2*nhid, K)
+        # self.gc3 = ChebConv(2*nhid, nhid, K)
+        self.gc4 = ChebConv(nhid, nhid, K)
         self.dropout = dropout
 
         self.classifier = nn.Sequential(
-            nn.Linear(268, 100),
+            nn.Linear(4288, 1024),
             nn.ReLU(),
             nn.Dropout(),
-            nn.Linear(100, 60)
+            # nn.Linear(2048, 1024),
+            # nn.ReLU(),
+            # nn.Dropout(),
+            nn.Linear(1024, 512)
         )
 
     def forward_single(self, data):
         x = self.gc1(data['x'], edge_index=data['edge_index'], edge_weight=data['edge_attr'])
-        BatchNorm(8)
+        BatchNorm(16)
         X = F.relu(x)
         x = F.dropout(x, self.dropout, training=self.training)
+        # x = self.gc2(x, edge_index=data['edge_index'], edge_weight=data['edge_attr'])
+        # BatchNorm(32)
+        # X = F.relu(x)
+        # x = F.dropout(x, self.dropout, training=self.training)
+        # x = self.gc3(x, edge_index=data['edge_index'], edge_weight=data['edge_attr'])
+        # BatchNorm(16)
+        # X = F.relu(x)
+        # x = F.dropout(x, self.dropout, training=self.training)
         x = self.gc4(x, edge_index=data['edge_index'], edge_weight=data['edge_attr'])
         return x
 
@@ -106,9 +117,9 @@ class Siamese_GeoCheby_Cos(nn.Module):
             conv_out2 = self.forward_single(input2)
             conv_out3 = self.forward_single(input3)
 
-            dense_out1 = self.classifier(conv_out1.T)
-            dense_out2 = self.classifier(conv_out2.T)
-            dense_out3 = self.classifier(conv_out3.T)
+            dense_out1 = self.classifier(conv_out1.flatten())
+            dense_out2 = self.classifier(conv_out2.flatten())
+            dense_out3 = self.classifier(conv_out3.flatten())
 
             outs1.append(dense_out1)
             outs2.append(dense_out2)
@@ -127,9 +138,9 @@ class Siamese_GeoChebyConv_Read(nn.Module):
         K = 3
         nclass = int(nclass)
         self.gc1 = ChebConv(nfeat, nhid, K)
-        self.gc2 = ChebConv(nhid, nhid, K)
-        self.gc3 = ChebConv(nhid, nhid, K)
-        self.gc4 = ChebConv(nhid, nclass, K)
+        # self.gc2 = ChebConv(nhid, nhid, K)
+        # self.gc3 = ChebConv(nhid, nhid, K)
+        self.gc4 = ChebConv(nhid, 1, K)
         self.dropout = dropout
 
         self.classifier = nn.Sequential(
@@ -168,7 +179,7 @@ class Siamese_GeoChebyConv_Read(nn.Module):
             conv_out2 = self.forward_single(input2)
 
             l1_distance =  nn.PairwiseDistance(p=1.0)
-            distance_out = l1_distance(conv_out1, conv_out2)
+            distance_out = l1_distance(conv_out1.flatten().unsqueeze(1), conv_out2.flatten().unsqueeze(1))
             dense_out = self.classifier(distance_out.T)
             outs.append(dense_out)
 

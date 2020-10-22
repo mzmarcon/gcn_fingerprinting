@@ -107,7 +107,7 @@ if __name__ == '__main__':
                                      nhid=args.hidden,
                                      nclass=1,
                                      dropout=args.dropout)
-        criterion = ContrastiveCosineLoss(args.temperature)
+        criterion = ContrastiveCosineLoss(args.temperature).to(device)
 
     model.to(device)
     
@@ -206,8 +206,8 @@ if __name__ == '__main__':
 
                     #predict
                     for n,_ in enumerate(out_anchor_test):
-                        sim_positive = nn.CosineSimilarity()(out_anchor_test[n],out_pos_test[n])
-                        sim_negative = nn.CosineSimilarity()(out_anchor_test[n],out_neg_test[n])
+                        sim_positive = nn.CosineSimilarity()(out_anchor_test[n].unsqueeze(0),out_pos_test[n].unsqueeze(0))
+                        sim_negative = nn.CosineSimilarity()(out_anchor_test[n].unsqueeze(0),out_neg_test[n].unsqueeze(0))
                         if sim_positive > sim_negative:
                             correct += 1
 

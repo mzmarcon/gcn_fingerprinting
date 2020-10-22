@@ -23,7 +23,8 @@ class ACERTA_FP(Dataset):
         betas_data_file = data_path + 'betas_data.hdf5'
         psc_data_file = data_path + 'shen_psc_task_schools.hdf5'
         stimuli_path = data_path + 'stimuli2/'
-                
+        
+        # File loading
         if input_type == 'betas':
             file_rst = h5py.File(rst_data_file, 'r')
             file_task = h5py.File(betas_data_file, 'r')
@@ -58,6 +59,7 @@ class ACERTA_FP(Dataset):
             ids_task_v1 = list(file_task['visit1'].keys())
             ids_task_v2 = list(file_task['visit2'].keys())
 
+        # Selection of IDs present in both visits, rest-task or rest-rest
         common_v1 = list(set(ids_rst_v1).intersection(ids_task_v1))
         common_v2 = list(set(ids_rst_v2).intersection(ids_task_v2))
         common_ids = list(set(common_v1).intersection(common_v2))
@@ -79,7 +81,7 @@ class ACERTA_FP(Dataset):
             elif input_type == 'PSC':
                 self.dataset = self.process_psc_dataset(file_task,stimuli_path,train_ids,labels_dict,adj_rst,condition=condition)
             elif input_type == 'RST':
-                self.dataset = self.process_RST_dataset(file_task,stimuli_path,train_ids,labels_dict,adj_rst,windowed, window_size, window_overlay)
+                self.dataset = self.process_RST_dataset(file_task,train_ids,labels_dict,adj_rst,windowed, window_size, window_overlay)
 
         if self.set == 'test':
             if input_type == 'betas':
@@ -87,7 +89,7 @@ class ACERTA_FP(Dataset):
             elif input_type == 'PSC':
                 self.dataset = self.process_psc_dataset(file_task,stimuli_path,test_ids,labels_dict,adj_rst,condition=condition)
             elif input_type == 'RST':
-                self.dataset = self.process_RST_dataset(file_task,stimuli_path,test_ids,labels_dict,adj_rst,windowed, window_size, window_overlay)
+                self.dataset = self.process_RST_dataset(file_task,test_ids,labels_dict,adj_rst,windowed, window_size, window_overlay)
 
     def __getitem__(self, idx):
 
@@ -126,16 +128,12 @@ class ACERTA_FP(Dataset):
         return len(self.dataset)
 
     def split_train_test(self,id_list,size=0.8,random_seed=42):
-        np.random.seed(random_seed)
+        seed = random.Random(random_seed)
         n_split = int(size*len(id_list))
-        train = list(np.random.choice(id_list,n_split,replace=False))
-        test = []
-        for item in id_list:
-            if item not in train:
-                test.append(item)
+        training_ids = seed.sample(id_list,k=n_split)
+        test_ids = list(set(id_list).difference(training_ids))
 
-        return train, test
-
+        return training_ids, test_ids
 
     def process_betas_dataset(self,file_task,ids,labels_dict,adj_rst):
         dataset = []
@@ -270,7 +268,7 @@ class ACERTA_FP(Dataset):
 
         return dataset
 
-    def process_RST_dataset(self,file_timeseries,stimuli_path,ids,labels_dict,adj_rst, windowed, window_size=25, window_ovelay=15):
+    def process_RST_dataset(self,file_timeseries,ids,labels_dict,adj_rst, windowed, window_size=25, window_ovelay=15):
 
         print("Loading RST dataset")
         dataset = []
