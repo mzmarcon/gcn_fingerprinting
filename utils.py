@@ -10,7 +10,8 @@ from numba import cuda
 
 def get_adjacency(cn_matrix, threshold):
     # mask = (cn_matrix > np.percentile(cn_matrix, threshold)).astype(np.uint8)
-    mask = (cn_matrix > threshold).astype(np.uint8)
+    abs_matrix = np.abs(cn_matrix)
+    mask = (abs_matrix > threshold).astype(np.uint8)
     sparse_matrix = cn_matrix * mask
     nodes, neighbors = np.nonzero(mask)
     sparse_indices = {}
