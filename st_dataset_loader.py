@@ -117,7 +117,6 @@ class ACERTA_reading_ST(Dataset):
                         feature = []
                         for timestamp in range(onset_time,onset_time+window_t):
                             feature.append(features[timestamp])
-                        feature = np.swapaxes(feature,0,1)
                         feature = torch.FloatTensor(feature)
 
                         dataset.append({

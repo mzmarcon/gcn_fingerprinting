@@ -7,7 +7,7 @@ import pandas as pd
 
 if __name__ == '__main__':
 
-    data_path = 'data/'
+    data_path = '../data/'
     csv_filename = data_path+'reading_labels.csv'
     rst_data_file = data_path + 'rst_cn_data.hdf5'
     psc_data_file = data_path + 'shen_psc_task_schools.hdf5'
@@ -61,6 +61,6 @@ if __name__ == '__main__':
     ids_v2 = common_good_v2 + common_bad_v2
 
     #save csv
-    dic = {'id': sub_ids, 'label': labels} 
+    dic = {'id': sub_ids, 'label': labels, 'visit': visit_labels}
     df = pd.DataFrame(data=dic)
     df.to_csv(csv_filename,index=False)
