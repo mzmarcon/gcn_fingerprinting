@@ -24,6 +24,8 @@ if __name__ == '__main__':
     classification = 'reading'
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--task', type=str, default='dyslexia',
+                        help='Task type', choices=['dyslexia','reading'])
     parser.add_argument('--condition', type=str, default='all',
                         help='Task condition used as input', choices=['reg','irr','pse','all'])
     parser.add_argument('--split', type=float, default=0.7,
@@ -50,9 +52,13 @@ if __name__ == '__main__':
                         help='Name of output file containing results metrics.')
     args = parser.parse_args()
 
-    #load and split dataset
-    # dataset = ACERTA_reading_ST()
-    dataset = ACERTA_dyslexic_ST()
+    # load dataset
+    if args.task == 'dyslexia':
+        dataset = ACERTA_dyslexic_ST()
+    elif args.task == 'reading':
+        dataset = ACERTA_reading_ST()
+    
+    # load split indices
     train_idx = dataset.train_idx
     test_idx = dataset.test_idx
 

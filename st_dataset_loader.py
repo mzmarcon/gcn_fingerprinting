@@ -39,6 +39,13 @@ class ACERTA_reading_ST(Dataset):
         self.dataset, label_dict = self.process_psc_reading_dataset(file_task,stimuli_path,self.ids,labels,visits,self.adj_rst,\
                                                         window_t=320,condition=condition,window=True)
                 
+        self.train_idx=[] 
+        for item in train_ids: 
+            self.train_idx.extend(label_dict[item])
+
+        self.test_idx=[] 
+        for item in test_ids: 
+            self.test_idx.extend(label_dict[item])
 
     def __getitem__(self, idx):
 
@@ -83,6 +90,9 @@ class ACERTA_reading_ST(Dataset):
 
         print("Loading PSC dataset")
         dataset = []
+        element_count = 0
+        #initialize label dict to save element indices for each class
+        label_dict = defaultdict(list)
 
         base_files = sorted(glob(stimuli_path+"base*.1D"))      
         reg_files = sorted(glob(stimuli_path+"reg*.1D"))
@@ -127,12 +137,17 @@ class ACERTA_reading_ST(Dataset):
                         })
                 else:
                     feature = features[:window_t]
-                    feature2 = features[window_t:2*window_t]
-
+                    label_dict[sub_id].append(element_count)
                     dataset.append(
                         {'graph': feature,'label': labels[n],'info': (sub_id, visit)})
+                    element_count += 1
+
+                    feature2 = features[window_t:2*window_t]
+                    label_dict[sub_id].append(element_count)
                     dataset.append(
                         {'graph': feature2,'label': labels[n],'info': (sub_id, visit)})
+                    element_count += 1
+
             else:
                 dataset.append({
                     'graph': features,
@@ -140,7 +155,7 @@ class ACERTA_reading_ST(Dataset):
                     'info': (sub_id, visit)
                 })
 
-        return dataset
+        return dataset, label_dict
 
     def generate_mean_adj(self,file_rst,ids,threshold):
         cn_matrix_list = []
