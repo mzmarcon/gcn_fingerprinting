@@ -20,9 +20,6 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Device:',device)
     
-    checkpoint = 'checkpoints/'
-    classification = 'reading'
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--task', type=str, default='dyslexia',
                         help='Task type', choices=['dyslexia','reading'])
@@ -55,8 +52,15 @@ if __name__ == '__main__':
     # load dataset
     if args.task == 'dyslexia':
         dataset = ACERTA_dyslexic_ST()
+        classification = 'dyslexia'
+        output_path = 'output/dyslexia/'
+        checkpoint = 'checkpoints/dyslexia/'
+
     elif args.task == 'reading':
         dataset = ACERTA_reading_ST()
+        output_path = 'output/reading/'
+        classification = 'reading'
+        checkpoint = 'checkpoints/dyslexia'
     
     # load split indices
     train_idx = dataset.train_idx
@@ -107,11 +111,11 @@ if __name__ == '__main__':
             optimizer.step()
 
         if e % 99 == 0 and e>0:
-            edge_imp_id = len(os.listdir('output/edge_importance/')) + 1
+            edge_imp_id = len(os.listdir(output_path+'edge_importance/')) + 1
             for importance in model.edge_importance:
                 edge_importances = importance*importance+torch.transpose(importance*importance,0,1)
                 edge_imp = torch.squeeze(edge_importances.data).cpu().numpy()
-                filename = "output/edge_importance/edge_imp_" + str(edge_imp_id)
+                filename = output_path + "edge_importance/edge_imp_" + str(edge_imp_id)
                 np.save(filename, edge_imp)
 
         counter += 1
@@ -179,7 +183,7 @@ if __name__ == '__main__':
     auc_score = roc_auc_score(y_true, y_prediction)
 
     outfile_id = len(os.listdir('output'))
-    outfile_name = 'output/' + args.outfile + '_' + str(outfile_id)
+    outfile_name = output_path + args.outfile + '_' + str(outfile_id)
     checkpoint_id = len(os.listdir(checkpoint)) + 1
 
     np.savez(outfile_name, training_loss=training_losses, test_loss=test_losses, counter=counter, accuracy=accuracy_list, \
