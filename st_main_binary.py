@@ -52,15 +52,13 @@ if __name__ == '__main__':
     # load dataset
     if args.task == 'dyslexia':
         dataset = ACERTA_dyslexic_ST()
-        classification = 'dyslexia'
         output_path = 'output/dyslexia/'
         checkpoint = 'checkpoints/dyslexia/'
 
     elif args.task == 'reading':
         dataset = ACERTA_reading_ST()
         output_path = 'output/reading/'
-        classification = 'reading'
-        checkpoint = 'checkpoints/dyslexia'
+        checkpoint = 'checkpoints/reading/'
     
     # load split indices
     train_idx = dataset.train_idx
@@ -188,5 +186,5 @@ if __name__ == '__main__':
 
     np.savez(outfile_name, training_loss=training_losses, test_loss=test_losses, counter=counter, accuracy=accuracy_list, \
             cm=cm,fpr=fpr,tpr=tpr,thresholds=thresholds,auc_score=auc_score,y_true=y_true,y_prediction=y_prediction)
-    torch.save(model.state_dict(), f"{checkpoint}chk_ST_{classification}_{checkpoint_id}.pth")
+    torch.save(model.state_dict(), f"{checkpoint}chk_ST_{args.task}_{checkpoint_id}.pth")
 
