@@ -1,10 +1,11 @@
 import numpy as np
 import torch
+import os
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from torch.utils.data import random_split
+from torch.utils.data.sampler import SubsetRandomSampler
 import torch.nn.functional as F
-from st_dataset_loader import ACERTA_reading_ST
+from st_dataset_loader import ACERTA_reading_ST, ACERTA_dyslexic_ST
 from models import *
 from utils import ContrastiveLoss
 import sys
@@ -13,6 +14,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score
 import seaborn as sns
+
 
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -24,7 +26,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--condition', type=str, default='all',
                         help='Task condition used as input', choices=['reg','irr','pse','all'])
-    parser.add_argument('--split', type=float, default=0.9,
+    parser.add_argument('--split', type=float, default=0.7,
                         help='Size of training set')
     parser.add_argument('--adj_threshold', type=float, default='0.5',
                         help='Threshold for RST connectivity matrix edge selection')
@@ -34,9 +36,9 @@ if __name__ == '__main__':
                         help='Training batch size')
     parser.add_argument('--test_batch', type=int, default=2,
                         help='Test batch size')
-    parser.add_argument('--lr', type=float, default=5e-5,
+    parser.add_argument('--lr', type=float, default=1e-4,
                         help='Initial learning rate')
-    parser.add_argument('--weight_decay', type=float, default=1e-3,
+    parser.add_argument('--weight_decay', type=float, default=1e-2,
                         help='Weight decay magnitude')
     parser.add_argument('--dropout', type=float, default=0.5,
                         help='Dropout magnitude')
@@ -44,22 +46,29 @@ if __name__ == '__main__':
                         help='Number of epochs')
     parser.add_argument('--no_scheduler', action='store_true',
                         help='Whether to use learning rate scheduler')
-    parser.add_argument('--outfile', type=str, default='outfile.npz',
-                        help='Path for output file containing results metrics.')
+    parser.add_argument('--outfile', type=str, default='outfile',
+                        help='Name of output file containing results metrics.')
     args = parser.parse_args()
 
     #load and split dataset
-    dataset = ACERTA_reading_ST()
-    train_set_size = int(len(dataset)*args.split)
-    val_set_size = len(dataset)-train_set_size
-    train_set, test_set = random_split(dataset,[train_set_size,val_set_size])
+    # dataset = ACERTA_reading_ST()
+    dataset = ACERTA_dyslexic_ST()
+    train_idx = dataset.train_idx
+    test_idx = dataset.test_idx
 
-    train_loader = DataLoader(train_set, shuffle=True, drop_last=True,
-                                batch_size=args.training_batch)
-    test_loader = DataLoader(test_set, shuffle=False, drop_last=False,
-                                batch_size=args.test_batch)
+    if len(set(train_idx).intersection(test_idx))>0:
+        raise ValueError("Dataset Double Dipping.")
+    else:
+        print("Dataset check.")
 
-    #TODO fix ADJ loading: use in processing function and TemporalModel loading.
+    np.random.shuffle(train_idx)
+    train_sampler = SubsetRandomSampler(train_idx)
+    test_sampler = SubsetRandomSampler(test_idx)
+
+    train_loader = DataLoader(dataset, drop_last=True,
+                                batch_size=args.training_batch, sampler=train_sampler)
+    test_loader = DataLoader(dataset, drop_last=False,
+                                batch_size=args.test_batch, sampler=test_sampler)
 
     model = TemporalModel(1,1,None,True,dataset.adj_rst)
     model.to(device)
@@ -68,7 +77,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
                                 weight_decay=args.weight_decay)
 
-    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.75,patience=40,min_lr=1e-6)
+    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.5,patience=10,min_lr=1e-6)
 
 #Training-----------------------------------------------------------------------------
 
@@ -92,11 +101,18 @@ if __name__ == '__main__':
             training_loss.backward()
             optimizer.step()
 
+        if e % 99 == 0 and e>0:
+            edge_imp_id = len(os.listdir('output/edge_importance/')) + 1
+            for importance in model.edge_importance:
+                edge_importances = importance*importance+torch.transpose(importance*importance,0,1)
+                edge_imp = torch.squeeze(edge_importances.data).cpu().numpy()
+                filename = "output/edge_importance/edge_imp_all_data_epoch_" + str(edge_imp_id)
+                np.save(filename, edge_imp)
+
         counter += 1
         training_losses.append(epoch_loss)
         if not args.no_scheduler:
             lr_scheduler.step(np.mean(epoch_loss))
-            # lr_scheduler.step()
 
 #Testing-----------------------------------------------------------------------------
         model.eval()
@@ -142,66 +158,24 @@ if __name__ == '__main__':
             accuracy = correct/(len(test_loader)*args.test_batch)
             accuracy_list.append(accuracy)
             print("Predictions: {} - len: {}".format(y_prediction,len(y_prediction)))
-            print("True: {}".format(y_true))        
+            print("True: {}".format(y_true))
+            u,c = np.unique(y_true,return_counts=True)
+            print("Portion: {}/{}".format(c[0],c[1]))
             print(', '.join('{:.3f}'.format(f) for f in y_output))
             print(np.unique(y_prediction,return_counts=True))
 
             log = 'Epoch: {:03d}, training_loss: {:.3f}, test_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
             print(log.format(e+1,np.mean(epoch_loss),torch.mean(torch.tensor(test_epoch_loss)),accuracy,optimizer.param_groups[0]['lr']))
 
-    np.savez('results.npz',train_loss=training_losses,test_loss=test_losses,test_acc=accuracy_list)
     cm = confusion_matrix(y_true, y_prediction,normalize='true')
     fpr, tpr, thresholds = roc_curve(y_true, torch.tensor(y_output).cpu())
     auc_score = roc_auc_score(y_true, y_prediction)
-    np.savez(args.outfile, training_loss=training_losses, test_loss=test_losses, counter=counter, accuracy=accuracy_list, \
+
+    outfile_id = len(os.listdir('output'))
+    outfile_name = 'output/' + args.outfile + '_' + str(outfile_id)
+    checkpoint_id = len(os.listdir(checkpoint)) + 1
+
+    np.savez(outfile_name, training_loss=training_losses, test_loss=test_losses, counter=counter, accuracy=accuracy_list, \
             cm=cm,fpr=fpr,tpr=tpr,thresholds=thresholds,auc_score=auc_score,y_true=y_true,y_prediction=y_prediction)
-    # torch.save(model.state_dict(), f"{checkpoint}chk_{classification}_{accuracy:.3f}.pth")
+    torch.save(model.state_dict(), f"{checkpoint}chk_ST_{classification}_{checkpoint_id}.pth")
 
-# run main_reading.py --model gcn_single --lr 5e-5 --epochs 200 --training_batch 4 --hidden 16 --condition ps
-#    ...: e --split 0.8 --input_type PSC --adj_threshold 0.7 --dropout 0.6  
-
-#Plots-----------------------------------------------------------------------------
-
-    fig, ax = plt.subplots(figsize=(10,8))
-    plt.plot(range(counter),np.mean(training_losses,axis=1), label='Training loss')
-    plt.plot(range(counter),np.mean(test_losses,axis=1), label='Validation loss')
-    plt.title('BCE Loss',fontsize=20)
-    plt.xlabel('Epochs',fontsize=20)
-    plt.ylabel('Loss',fontsize=20)
-    plt.legend(prop={'size': 16})
-    plt.grid()
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_visible(False)
-    ax.spines["bottom"].set_visible(False)
-    plt.show()
-
-    fig, ax = plt.subplots(figsize=(10,8))
-    plt.plot(range(e+1),accuracy_list)
-    plt.title('Accuracy per epoch',fontsize=20)
-    plt.xlabel('Epoch',fontsize=20)
-    plt.ylabel('Accuracy',fontsize=20)
-    plt.grid()
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_visible(False)
-    ax.spines["bottom"].set_visible(False)
-    plt.show()
-
-    fig, ax = plt.subplots(figsize=(10,8))  
-    sns.heatmap(cm, annot=True, ax = ax, fmt='.2g',cmap='Blues',annot_kws={"fontsize":18})  
-    ax.set_xlabel('Predicted',fontsize=20)
-    ax.set_ylabel('True',fontsize=20)
-    ax.set_title('Confusion Matrix',fontsize=20)
-    ax.xaxis.set_ticklabels(['Good', 'Bad'],fontsize=18); ax.yaxis.set_ticklabels(['Good', 'Bad'],fontsize=18)
-    plt.show()
-
-    fig, ax = plt.subplots(figsize=(10,8))  
-    plt.plot(fpr,tpr, label='ROC curve (area = %0.2f)' % auc_score)
-    plt.plot([0, 1], [0, 1], color='grey', linestyle='--')
-    plt.grid()
-    plt.title('ROC Curve',fontsize=20)
-    plt.xlabel('False Positive Rate',fontsize=20)
-    plt.ylabel('True Positive Rate',fontsize=20)
-    plt.legend(prop={'size': 16})
-    plt.show()
