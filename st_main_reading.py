@@ -56,11 +56,6 @@ if __name__ == '__main__':
     train_idx = dataset.train_idx
     test_idx = dataset.test_idx
 
-    if len(set(train_idx).intersection(test_idx))>0:
-        raise ValueError("Dataset Double Dipping.")
-    else:
-        print("Dataset check.")
-
     np.random.shuffle(train_idx)
     train_sampler = SubsetRandomSampler(train_idx)
     test_sampler = SubsetRandomSampler(test_idx)
@@ -85,6 +80,8 @@ if __name__ == '__main__':
     training_losses = []
     test_losses = []
     accuracy_list = []
+    train_ids = []
+    
     for e in range(args.epochs):
         model.train()
         epoch_loss = []
@@ -94,6 +91,8 @@ if __name__ == '__main__':
             label = data['label_single'].to(device)
 
             output = model(input_anchor).to(device)
+
+            train_ids.extend(data['anchor_info'][0][:])
 
             training_loss = criterion(output.squeeze(), label.float())
             epoch_loss.append(training_loss.item())
@@ -106,7 +105,7 @@ if __name__ == '__main__':
             for importance in model.edge_importance:
                 edge_importances = importance*importance+torch.transpose(importance*importance,0,1)
                 edge_imp = torch.squeeze(edge_importances.data).cpu().numpy()
-                filename = "output/edge_importance/edge_imp_all_data_epoch_" + str(edge_imp_id)
+                filename = "output/edge_importance/edge_imp_" + str(edge_imp_id)
                 np.save(filename, edge_imp)
 
         counter += 1
@@ -123,10 +122,12 @@ if __name__ == '__main__':
         test_epoch_loss = []
         test_counter = 0
         ex_count = 0
+        test_ids = []
         with torch.no_grad():
             for i, data_test in enumerate(test_loader):
                 anchor_test_id, anchor_test_visit = map(list,data_test['anchor_info'])
 
+                test_ids.extend(data_test['anchor_info'][0][:])
 
                 input_achor_test = data_test['input_anchor'].unsqueeze(1).unsqueeze(4).to(device)
                 label_test = data_test['label_single'].to(device)
@@ -160,13 +161,13 @@ if __name__ == '__main__':
             print("Predictions: {} - len: {}".format(y_prediction,len(y_prediction)))
             print("True: {}".format(y_true))
             u,c = np.unique(y_true,return_counts=True)
-            print("Portion: {}/{}".format(c[0],c[1]))
+            print("Chance: {}/{}={}".format(c[0],c[1],(c[0]/(c[0]+c[1]))))
             print(', '.join('{:.3f}'.format(f) for f in y_output))
             print(np.unique(y_prediction,return_counts=True))
 
             log = 'Epoch: {:03d}, training_loss: {:.3f}, test_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
             print(log.format(e+1,np.mean(epoch_loss),torch.mean(torch.tensor(test_epoch_loss)),accuracy,optimizer.param_groups[0]['lr']))
-
+            
     cm = confusion_matrix(y_true, y_prediction,normalize='true')
     fpr, tpr, thresholds = roc_curve(y_true, torch.tensor(y_output).cpu())
     auc_score = roc_auc_score(y_true, y_prediction)

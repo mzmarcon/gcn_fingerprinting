@@ -471,7 +471,7 @@ class st_gcn(nn.Module):
                  dropout=0.5,
                  residual=True):
         super().__init__()
-        print("Dropout={}".format(dropout))
+        # print("Dropout={}".format(dropout))
         assert len(kernel_size) == 2
         assert kernel_size[0] % 2 == 1
         padding = ((kernel_size[0] - 1) // 2, 0)

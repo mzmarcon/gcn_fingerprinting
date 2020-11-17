@@ -28,14 +28,15 @@ class ACERTA_reading_ST(Dataset):
         file_task = h5py.File(psc_data_file, 'r')
         
         csv_file = pd.read_csv(reading_labels)
-        ids = csv_file['id'].tolist()
+        self.ids = csv_file['id'].tolist()
         labels = csv_file['label'].tolist()
         visits = csv_file['visit'].tolist()
 
-        self.adj_rst = self.generate_mean_adj(file_rst,ids,threshold=adj_threshold)
+        self.adj_rst = self.generate_mean_adj(file_rst,self.ids,threshold=adj_threshold)
 
-        #TODO put dataset shape in accordance do st model.
-        self.dataset = self.process_psc_reading_dataset(file_task,stimuli_path,ids,labels,visits,self.adj_rst,\
+        train_ids, test_ids = train_test_split(self.ids,train_size=split)
+
+        self.dataset, label_dict = self.process_psc_reading_dataset(file_task,stimuli_path,self.ids,labels,visits,self.adj_rst,\
                                                         window_t=320,condition=condition,window=True)
                 
 
@@ -158,7 +159,15 @@ class ACERTA_reading_ST(Dataset):
 
         return adj_rst
 
+
+"""""""""""""""
+Dyslexia
+"""""""""""""""
+
 class ACERTA_dyslexic_ST(Dataset):
+    """
+    Dataset class for dyslexia classification
+    """
     def __init__(self, split=0.8, input_type='betas', condition='all', adj_threshold=0.0):
         self.split = split
 
@@ -179,9 +188,9 @@ class ACERTA_dyslexic_ST(Dataset):
         labels = csv_file['label'].tolist()
 
         self.adj_rst = self.generate_mean_adj(file_rst,self.ids,threshold=adj_threshold)
+        
         train_ids, test_ids = train_test_split(self.ids,train_size=split)
 
-        #TODO put dataset shape in accordance do st model.
         self.dataset, label_dict = self.process_psc_reading_dataset(file_schools,file_ambac,stimuli_path,self.ids,labels,self.adj_rst,\
                                                         window_t=300,condition=condition,window=True)
 
@@ -192,6 +201,11 @@ class ACERTA_dyslexic_ST(Dataset):
         self.test_idx=[] 
         for item in test_ids: 
             self.test_idx.extend(label_dict[item])
+
+        if len(set(self.train_idx).intersection(self.test_idx))>0:
+            raise ValueError("Dataset Double Dipping.")
+        else:
+            print("Dataset check.")
 
     def __getitem__(self, idx):
 
