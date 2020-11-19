@@ -519,9 +519,7 @@ class ACERTA_reading(Dataset):
                     feature.append(features[timestamp])
                 feature = np.swapaxes(feature,0,1)
                 feature = torch.FloatTensor(feature)
-
-                #TODO remove baseline
-
+                
                 data = Data(x=feature, edge_index=adj_rst._indices(), 
                             edge_attr=adj_rst._values(),label=labels[n])
                 data.id = (sub_id, visit)

@@ -23,8 +23,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--task', type=str, default='dyslexia',
                         help='Task type', choices=['dyslexia','reading'])
-    parser.add_argument('--condition', type=str, default='all',
-                        help='Task condition used as input', choices=['reg','irr','pse','all'])
+    parser.add_argument('--condition', type=str, default='none',
+                        help='Task condition used as input', choices=['reg','irr','pse','all','none'])
     parser.add_argument('--split', type=float, default=0.7,
                         help='Size of training set')
     parser.add_argument('--adj_threshold', type=float, default='0.5',
@@ -51,12 +51,12 @@ if __name__ == '__main__':
 
     # load dataset
     if args.task == 'dyslexia':
-        dataset = ACERTA_dyslexic_ST()
+        dataset = ACERTA_dyslexic_ST(args.split,args.condition,args.adj_threshold)
         output_path = 'output/dyslexia/'
         checkpoint = 'checkpoints/dyslexia/'
 
     elif args.task == 'reading':
-        dataset = ACERTA_reading_ST()
+        dataset = ACERTA_reading_ST(args.split,args.condition,args.adj_threshold)
         output_path = 'output/reading/'
         checkpoint = 'checkpoints/reading/'
     
@@ -87,12 +87,14 @@ if __name__ == '__main__':
     counter=0
     training_losses = []
     test_losses = []
+    train_accuracy_list = []
     accuracy_list = []
-    train_ids = []
-    
+
     for e in range(args.epochs):
         model.train()
         epoch_loss = []
+        correct = 0
+        ex_count_train = 0
         for i, data in enumerate(tqdm(train_loader)):
 
             input_anchor = data['input_anchor'].unsqueeze(1).unsqueeze(4).to(device)
@@ -100,13 +102,22 @@ if __name__ == '__main__':
 
             output = model(input_anchor).to(device)
 
-            train_ids.extend(data['anchor_info'][0][:])
-
             training_loss = criterion(output.squeeze(), label.float())
             epoch_loss.append(training_loss.item())
             optimizer.zero_grad()
             training_loss.backward()
             optimizer.step()
+                
+            # Make predictions every 5 mini-batches
+            if i % 5 == 0:
+                for n,_ in enumerate(output):
+                    if output[n]>0.5:
+                        prediction = 1
+                    else:
+                        prediction = 0
+                    if prediction == label[n]:
+                        correct += 1
+                    ex_count_train += 1
 
         if e % 99 == 0 and e>0:
             edge_imp_id = len(os.listdir(output_path+'edge_importance/')) + 1
@@ -117,6 +128,8 @@ if __name__ == '__main__':
                 np.save(filename, edge_imp)
 
         counter += 1
+        train_accuracy = correct/ex_count_train
+        train_accuracy_list.append(train_accuracy)
         training_losses.append(epoch_loss)
         if not args.no_scheduler:
             lr_scheduler.step(np.mean(epoch_loss))
@@ -166,15 +179,15 @@ if __name__ == '__main__':
             print("Correct: {}/{}".format(correct,(len(test_loader)*args.test_batch)))
             accuracy = correct/(len(test_loader)*args.test_batch)
             accuracy_list.append(accuracy)
-            print("Predictions: {} - len: {}".format(y_prediction,len(y_prediction)))
-            print("True: {}".format(y_true))
+            # print("Predictions: {} - len: {}".format(y_prediction,len(y_prediction)))
+            # print("True: {}".format(y_true))
             u,c = np.unique(y_true,return_counts=True)
-            print("Chance: {}/{}={}".format(c[0],c[1],(c[0]/(c[0]+c[1]))))
-            print(', '.join('{:.3f}'.format(f) for f in y_output))
+            print("Chance: {}/{}={:.3f}".format(c[0],c[1],(c[0]/(c[0]+c[1]))))
+            # print(', '.join('{:.3f}'.format(f) for f in y_output))
             print(np.unique(y_prediction,return_counts=True))
 
-            log = 'Epoch: {:03d}, training_loss: {:.3f}, test_loss: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
-            print(log.format(e+1,np.mean(epoch_loss),torch.mean(torch.tensor(test_epoch_loss)),accuracy,optimizer.param_groups[0]['lr']))
+            log = 'Epoch: {:03d}, train_loss: {:.3f}, test_loss: {:.3f}, train_acc: {:.3f}, test_acc: {:.3f}, lr: {:.2E}'
+            print(log.format(e+1,np.mean(epoch_loss),torch.mean(torch.tensor(test_epoch_loss)),train_accuracy,accuracy,optimizer.param_groups[0]['lr']))
             
     cm = confusion_matrix(y_true, y_prediction,normalize='true')
     fpr, tpr, thresholds = roc_curve(y_true, torch.tensor(y_output).cpu())
@@ -184,7 +197,7 @@ if __name__ == '__main__':
     outfile_name = output_path + args.outfile + '_' + str(outfile_id)
     checkpoint_id = len(os.listdir(checkpoint)) + 1
 
-    np.savez(outfile_name, training_loss=training_losses, test_loss=test_losses, counter=counter, accuracy=accuracy_list, \
+    np.savez(outfile_name, training_loss=training_losses, test_loss=test_losses, counter=counter, accuracy=accuracy_list, train_accuracy=train_accuracy_list,\
             cm=cm,fpr=fpr,tpr=tpr,thresholds=thresholds,auc_score=auc_score,y_true=y_true,y_prediction=y_prediction)
     torch.save(model.state_dict(), f"{checkpoint}chk_ST_{args.task}_{checkpoint_id}.pth")
 

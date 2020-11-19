@@ -14,12 +14,11 @@ from collections import defaultdict
 from glob import glob
 
 class ACERTA_reading_ST(Dataset):
-    def __init__(self, split=0.8, input_type='betas', condition='all', adj_threshold=0.0):
+    def __init__(self, split=0.8, condition='none', adj_threshold=0.0, window_t=320):
         self.split = split
 
         data_path = 'data/'
         rst_data_file = data_path + 'rst_cn_data.hdf5'
-        betas_data_file = data_path + 'betas_data.hdf5'
         psc_data_file = data_path + 'shen_psc_task_schools.hdf5'
         reading_labels = data_path + 'reading_labels.csv'
         stimuli_path = data_path + 'stimuli2/'
@@ -28,24 +27,40 @@ class ACERTA_reading_ST(Dataset):
         file_task = h5py.File(psc_data_file, 'r')
         
         csv_file = pd.read_csv(reading_labels)
-        self.ids = csv_file['id'].tolist()
-        labels = csv_file['label'].tolist()
-        visits = csv_file['visit'].tolist()
+        
+        # prune overrepresented dataset examples SCHM (bad readers) from csv
+        sch_idx = csv_file.index[csv_file['id'].str.contains('SCHM')].tolist()
+        to_remove = random.sample(sch_idx,8)
+        csv_pruned = csv_file.drop(to_remove)
 
-        self.adj_rst = self.generate_mean_adj(file_rst,self.ids,threshold=adj_threshold)
+        # retrieve csv values
+        ids = csv_pruned['id'].tolist()
+        labels = csv_pruned['label'].tolist()
+        visits = csv_pruned['visit'].tolist()
+        
+        # zip ids and visits for dataset split
+        tup_list = list(zip(ids,visits))
+        self.ids_visit_list = [sub_id + 'visit' + str(v) for sub_id,v in tup_list[:]]
 
-        train_ids, test_ids = train_test_split(self.ids,train_size=split)
+        self.adj_rst = self.generate_mean_adj(file_rst,ids,threshold=adj_threshold)
 
-        self.dataset, label_dict = self.process_psc_reading_dataset(file_task,stimuli_path,self.ids,labels,visits,self.adj_rst,\
-                                                        window_t=320,condition=condition,window=True)
+        self.train_ids, self.test_ids = train_test_split(self.ids_visit_list,train_size=split,stratify=labels)
+
+        self.dataset, self.label_dict = self.process_psc_reading_dataset(file_task,stimuli_path,ids,labels,visits,self.adj_rst,\
+                                                        window_t=window_t,condition=condition,window=True)
                 
         self.train_idx=[] 
-        for item in train_ids: 
-            self.train_idx.extend(label_dict[item])
+        for item in self.train_ids: 
+            self.train_idx.extend(self.label_dict[item])
 
         self.test_idx=[] 
-        for item in test_ids: 
-            self.test_idx.extend(label_dict[item])
+        for item in self.test_ids: 
+            self.test_idx.extend(self.label_dict[item])
+        
+        if len(set(self.train_idx).intersection(self.test_idx))>0:
+            raise ValueError("Dataset Double Dipping.")
+        else:
+            print("Dataset check.")
 
     def __getitem__(self, idx):
 
@@ -86,7 +101,7 @@ class ACERTA_reading_ST(Dataset):
     def __len__(self):
         return len(self.dataset)
 
-    def process_psc_reading_dataset(self,file_task,stimuli_path,ids,labels,visits,adj_rst,window_t=12,condition='all',window=False):
+    def process_psc_reading_dataset(self,file_task,stimuli_path,ids,labels,visits,adj_rst,window_t,condition='none',window=False):
 
         print("Loading PSC dataset")
         dataset = []
@@ -124,26 +139,42 @@ class ACERTA_reading_ST(Dataset):
 
             if window:
                 if window_t<50:
-                    for onset_time in stim_times:
-                        feature = []
-                        for timestamp in range(onset_time,onset_time+window_t):
-                            feature.append(features[timestamp])
-                        feature = torch.FloatTensor(feature)
+                    if condition == 'none':
+                        for onset_time in stim_times:
+                            if window_t < 12:
+                                onset_time = onset_time + 3
+                            feature = features[onset_time:onset_time+window_t]
+                            feature = torch.FloatTensor(feature)
+                            dataset.append({
+                                'graph': feature,
+                                'label': labels[n],
+                                'info': (sub_id, visit)
+                            })
+                            label_dict[sub_id+visit].append(element_count)
+                            element_count += 1
 
-                        dataset.append({
-                            'graph': feature,
-                            'label': labels[n],
-                            'info': (sub_id, visit)
-                        })
+                    elif condition == 'all':   # Generates one feature with the stims for each condition. Recommended window_t = 8
+                        for stimuli in [reg_times, irr_times, pse_times]:
+                            feature = []
+                            for onset_time in stimuli:
+                                feature.extend(features[onset_time:onset_time+window_t])
+                            feature = torch.FloatTensor(feature)
+                            dataset.append({
+                                'graph': feature,
+                                'label': labels[n],
+                                'info': (sub_id, visit)
+                            })
+                            label_dict[sub_id+visit].append(element_count)
+                            element_count += 1
                 else:
                     feature = features[:window_t]
-                    label_dict[sub_id].append(element_count)
+                    label_dict[sub_id+visit].append(element_count)
                     dataset.append(
                         {'graph': feature,'label': labels[n],'info': (sub_id, visit)})
                     element_count += 1
 
                     feature2 = features[window_t:2*window_t]
-                    label_dict[sub_id].append(element_count)
+                    label_dict[sub_id+visit].append(element_count)
                     dataset.append(
                         {'graph': feature2,'label': labels[n],'info': (sub_id, visit)})
                     element_count += 1
@@ -154,6 +185,8 @@ class ACERTA_reading_ST(Dataset):
                     'label': labels[n],
                     'info': (sub_id, visit)
                 })
+                label_dict[sub_id+visit].append(element_count)
+                element_count += 1
 
         return dataset, label_dict
 
