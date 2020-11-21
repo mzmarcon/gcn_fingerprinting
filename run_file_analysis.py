@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score
+from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score, precision_recall_fscore_support
 import seaborn as sns
 import matplotlib.pyplot as plt
 import torch
@@ -8,6 +8,7 @@ from nilearn import plotting
 import itertools
 import os
 import pandas as pd
+import copy
 
 def get_max_weights(matrix,percentual):
     """
@@ -58,7 +59,7 @@ def plot_weights_connectome(weights_mask,threshold='90%',size=500,title='',color
     else:
         edge_cmap = 'red_transparent'
 
-    plotting.plot_connectome(fill_triu,coords,edge_threshold=threshold,node_size=column_scaled,
+    plotting.plot_connectome(fill_triu,coords,edge_threshold=threshold,node_size=column_scaled, annotate=True,
                             edge_vmin=fill_triu.min(),edge_vmax=fill_triu.max(),title=title,edge_cmap=edge_cmap,colorbar=colorbar,display_mode='lyrz')
 
     plotting.show()
@@ -130,15 +131,23 @@ def plot_macro_matrix(macro_matrix,title=''):
 
 if __name__ == '__main__':
  
-    if sys.argv[1]=='edge':
+    file_path = sys.argv[1]
+ 
+    if 'edge' in file_path:
         mode='edge'
-    elif sys.argv[1]=='results':
+    elif 'outfile' in file_path:
         mode='results'
     else:
         raise ValueError('Invalid analysis mode in argv[1] - edge or results')
 
-    file_path = sys.argv[2]
+    if 'dyslexia' in file_path:
+        task = 'Dyslexia'
+    elif 'reading' in file_path:
+        task = 'Reading'
 
+    print("Plotting {} anlysis for {} task.".format(mode,task))
+
+    train_acc = False
     if mode == 'results':
         file = np.load(file_path,allow_pickle=True)
         fpr = file['fpr']
@@ -151,6 +160,19 @@ if __name__ == '__main__':
         y_true = file['y_true']
         y_prediction = file['y_prediction']
         counter = file['counter']
+        if 'train_accuracy' in list(file.keys()):
+                train_acc_list = file['train_accuracy']
+                train_acc = True
+
+        precision, recall, fscore, _ = precision_recall_fscore_support(list(y_true), 
+                                                                       list(y_prediction),average='micro') 
+
+        ### Print Summary ###
+        print("Results summary:")
+        print("Final training loss: {:.3f} | Final test loss: {:.3f}".format(np.mean(training_loss[-1]),torch.mean(torch.Tensor(list(test_loss[-1])))))
+        print("Final test accuracy: {:.3f} | Top test accuracy: {:.3f}".format(acc_list[-1],acc_list.max()))
+        print("AUC: {} | Precision: {} | Recall: {} | F-score: {}".format(auc,precision,recall,fscore))
+        print("Confusion Matrix:\n",cm)
 
         ### Plots ###
 
@@ -169,10 +191,13 @@ if __name__ == '__main__':
         plt.show()
 
         fig, ax = plt.subplots(figsize=(10,8))
-        plt.plot(acc_list)
+        if train_acc:
+            plt.plot(train_acc_list,label="Train accuracy")
+        plt.plot(acc_list,label='Validation accuracy')
         plt.title('Accuracy per epoch',fontsize=20)
         plt.xlabel('Epoch',fontsize=20)
         plt.ylabel('Accuracy',fontsize=20)
+        plt.legend(prop={'size': 16})
         plt.grid()
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
@@ -185,7 +210,11 @@ if __name__ == '__main__':
         ax.set_xlabel('Predicted',fontsize=20)
         ax.set_ylabel('True',fontsize=20)
         ax.set_title('Confusion Matrix',fontsize=20)
-        ax.xaxis.set_ticklabels(['Dyslexic', 'Control'],fontsize=18); ax.yaxis.set_ticklabels(['Dyslexic', 'Control'],fontsize=18)
+        if task == 'Dyslexia':
+            ax.xaxis.set_ticklabels(['Dyslexic', 'Control'],fontsize=18); ax.yaxis.set_ticklabels(['Dyslexic', 'Control'],fontsize=18)
+        else:
+            ax.xaxis.set_ticklabels(['Good', 'Bad'],fontsize=18); ax.yaxis.set_ticklabels(['Good', 'Bad'],fontsize=18)
+
         plt.show()
 
         fig, ax = plt.subplots(figsize=(10,8))  
@@ -202,7 +231,15 @@ if __name__ == '__main__':
     elif mode == 'edge':
         edge = np.load(file_path)
         file_name = file_path.split('/')[-1].split('.')[0]
-        plot_weights_connectome(edge,threshold='99.2%',title='Edge Importance Dyslexia: '+file_name)
+       
+        edge_clip = edge * (edge>edge.min())
+        plot_weights_connectome(edge_clip,threshold='99.9%',size=200,title='Edge Importance ' + task + ': ' + file_name + ' - Zero Clipped')
 
-        # d_edge, macro_edge = get_macro_matrix(edge,type='sum')
-        # plot_macro_matrix(macro_edge)
+        d_edge_clip, macro_edge_clip = get_macro_matrix(edge_clip,type='sum')
+        plot_macro_matrix(macro_edge_clip,title='Macro Matrix - Zero Clipped ' + task)
+
+        idx_max, w_max, max_mat = get_max_weights(edge,0.1)
+        d_edgemax, macro_edgemax = get_macro_matrix(max_mat,type='sum')
+        plot_macro_matrix(macro_edgemax,title='Macro Matrix - Max 10% weights ' + task)
+        max_norm = (max_mat - max_mat.min()) / (max_mat.max() - max_mat.min())
+
