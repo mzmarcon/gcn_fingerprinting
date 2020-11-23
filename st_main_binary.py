@@ -45,18 +45,22 @@ if __name__ == '__main__':
                         help='Number of epochs')
     parser.add_argument('--no_scheduler', action='store_true',
                         help='Whether to use learning rate scheduler')
+    parser.add_argument('--patience', type=int, default=10,
+                        help='Scheduler patience in epochs.')
     parser.add_argument('--outfile', type=str, default='outfile',
                         help='Name of output file containing results metrics.')
+    parser.add_argument('--prune', action='store_true',
+                        help='Whether to prune out cerebellum.')
     args = parser.parse_args()
 
     # load dataset
     if args.task == 'dyslexia':
-        dataset = ACERTA_dyslexic_ST(args.split,args.condition,args.adj_threshold)
+        dataset = ACERTA_dyslexic_ST(args.split,args.condition,args.adj_threshold,args.prune)
         output_path = 'output/dyslexia/'
         checkpoint = 'checkpoints/dyslexia/'
 
     elif args.task == 'reading':
-        dataset = ACERTA_reading_ST(args.split,args.condition,args.adj_threshold)
+        dataset = ACERTA_reading_ST(args.split,args.condition,args.adj_threshold,args.prune)
         output_path = 'output/reading/'
         checkpoint = 'checkpoints/reading/'
     
@@ -73,14 +77,14 @@ if __name__ == '__main__':
     test_loader = DataLoader(dataset, drop_last=False,
                                 batch_size=args.test_batch, sampler=test_sampler)
 
-    model = TemporalModel(1,1,None,True,dataset.adj_rst)
+    model = TemporalModel(1,1,None,True,dataset.adj_matrix)
     model.to(device)
     # criterion = nn.BCEWithLogitsLoss()
     criterion = nn.BCELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
                                 weight_decay=args.weight_decay)
 
-    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.5,patience=10,min_lr=1e-6)
+    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.5,patience=args.patience,min_lr=1e-6)
 
 #Training-----------------------------------------------------------------------------
 
@@ -193,7 +197,7 @@ if __name__ == '__main__':
     fpr, tpr, thresholds = roc_curve(y_true, torch.tensor(y_output).cpu())
     auc_score = roc_auc_score(y_true, y_prediction)
 
-    outfile_id = len(os.listdir('output'))
+    outfile_id = len(os.listdir(output_path)) + 1
     outfile_name = output_path + args.outfile + '_' + str(outfile_id)
     checkpoint_id = len(os.listdir(checkpoint)) + 1
 

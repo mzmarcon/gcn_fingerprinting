@@ -20,10 +20,10 @@ parser.add_argument('--in_files', type=str, default='acerta_TASK/AMBAC/PROC.PALA
                     help='path and filename for the parcellation to be used')
 parser.add_argument('--subjects_ids', type=str, default='../subjects_ids.csv',
                     help='path and filename for the subjects ids file to be used')
-parser.add_argument('--output_file', type=str, default='hdf5_files/shen_psc_task_AMBAC.hdf5',
+parser.add_argument('--output_file', type=str, default='hdf5_files/shen_cn_task_AMBAC.hdf5',
                     help='file to store the connectivity matrices output')
 parser.add_argument('--nifti_type', type=str, default='psc',
-                    help='data on the nifti file', choices=['errts','psc'])
+                    help='data on the nifti file', choices=['cn','psc'])
 parser.add_argument('--stims_folder', type=str, default='stimuli/',
                     help='folder containing the stim times')
 
@@ -51,8 +51,8 @@ masker = NiftiLabelsMasker(labels_img=in_rois, standardize=True)
 correlation_measure = ConnectivityMeasure(kind='correlation')
 
 for visit in visits:
-    if nifti_type == 'errts':
-        nifti_files = glob.glob(in_files+visit+'/*+tlrc.BRIK')
+    if nifti_type == 'cn':
+        nifti_files = glob.glob(in_files+visit+'/PSC.*')
         print(visit)
         for subj_id in subject_ids:
             subject = subj_id[0]

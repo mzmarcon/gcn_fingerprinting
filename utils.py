@@ -7,6 +7,7 @@ from scipy.sparse.linalg.eigen.arpack import eigsh
 import torch.nn.functional as F
 import torch.nn as nn
 from numba import cuda
+import pandas as pd
 
 def get_adjacency(cn_matrix, threshold):
     # mask = (cn_matrix > np.percentile(cn_matrix, threshold)).astype(np.uint8)
@@ -146,3 +147,27 @@ class ContrastiveCosineLoss(torch.nn.Module):
         return loss
 
 
+def prune_macro_region(matrix,target_region,csv_path='data/shen_268_parcellation_networklabels.csv'):
+    """
+    Prune a macro region from adjacency matrix
+
+    (0: Medial Frontal), (1: Frontoparietal), (2: Default Mode), (3: Subcortical-Cerebellum),
+    (4: Motor), (5: Visual I), (6: Visual II), (7: Visual Association)
+
+    returns: pruned matrix
+    """
+    regions = pd.read_csv(csv_path)
+    nodes = regions.Node.values
+    networks = regions.Network.values
+    network_n = len(np.unique(networks))
+
+    # Make a dict with the nodes for each macro region
+    d = {}
+    # Get indices of each region in networks list and retrieve nodes of those indices in nodes list 
+    for item in np.unique(networks): 
+        d[item-1] = np.where(networks==item) # node index - 1 = network index (csv nodes indexed at 1)
+
+    for item in d[target_region][0]: 
+        matrix[item] = np.zeros(268) 
+    
+    return matrix

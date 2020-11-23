@@ -9,6 +9,7 @@ import itertools
 import os
 import pandas as pd
 import copy
+from scipy.stats import mode
 
 def get_max_weights(matrix,percentual):
     """
@@ -64,6 +65,7 @@ def plot_weights_connectome(weights_mask,threshold='90%',size=500,title='',color
 
     plotting.show()
 
+
 def get_macro_matrix(matrix,csv_path='data/shen_268_parcellation_networklabels.csv',type='delta'):
     """
     Function that gets nodes for each macro region. Macro matrix contains delta between number of 
@@ -108,10 +110,11 @@ def get_macro_matrix(matrix,csv_path='data/shen_268_parcellation_networklabels.c
 
     return d, macro_matrix
 
-def plot_macro_matrix(macro_matrix,title=''):
+def plot_macro_matrix(macro_matrix,title='',cmap='OrRd'):
 
     mask = np.triu(macro_matrix,1)
-    cmap = sns.diverging_palette(220, 20, as_cmap=True)
+    # cmap = sns.diverging_palette(220, 20, as_cmap=True)
+    # cmap = sns.cubehelix_palette(as_cmap=True)
 
     x_labels = ['Medial Frontal','Frontoparietal', 'Default Mode', 'Subcortical-Cerebellum',
                      'Motor','Visual I','Visual II', 'Visual Association']
@@ -119,13 +122,15 @@ def plot_macro_matrix(macro_matrix,title=''):
                      'Motor','Visual I','Visual II', 'Visual Association']
 
     fig, ax = plt.subplots(figsize=(15,10))
-    ax = sns.heatmap(np.tril(macro_matrix), mask=mask, cmap=cmap, center=0, xticklabels=x_labels,
-                yticklabels=y_labels, square=True, linewidths=.5)
+    # sns.set_context("paper", font_scale=1.2)
+    ax = sns.heatmap(np.tril(macro_matrix), mask=mask, cmap=cmap, xticklabels=x_labels,
+                yticklabels=y_labels, square=True, linewidths=.3, cbar_kws={'label': 'Sum of Weights'})
 
-    ax.set_xticklabels(x_labels,rotation=20,ha='right',rotation_mode='anchor')
-    ax.set_yticklabels(y_labels,rotation=15)
-    # plt.title('(No positive edges - No negative edges) per region - '+title)
-    plt.title(title)
+    ax.set_xticklabels(x_labels,rotation=16,ha='right',rotation_mode='anchor',fontsize=14)
+    ax.set_yticklabels(y_labels,rotation=16,fontsize=14)
+    ax.figure.axes[-1].yaxis.label.set_size(16) #set colorbar label size
+    ax.figure.axes[-1].tick_params(labelsize=14)
+    plt.title(title,fontsize=14)
     plt.show()
 
 
@@ -134,21 +139,21 @@ if __name__ == '__main__':
     file_path = sys.argv[1]
  
     if 'edge' in file_path:
-        mode='edge'
+        results_mode='edge'
     elif 'outfile' in file_path:
-        mode='results'
+        results_mode='results'
     else:
-        raise ValueError('Invalid analysis mode in argv[1] - edge or results')
+        raise ValueError('Invalid analysis results_mode in argv[1] - edge or results')
 
-    if 'dyslexia' in file_path:
+    if 'dyslexic' in file_path:
         task = 'Dyslexia'
     elif 'reading' in file_path:
         task = 'Reading'
 
-    print("Plotting {} anlysis for {} task.".format(mode,task))
+    print("Plotting {} anlysis for {} task.".format(results_mode,task))
 
     train_acc = False
-    if mode == 'results':
+    if results_mode == 'results':
         file = np.load(file_path,allow_pickle=True)
         fpr = file['fpr']
         tpr = file['tpr']
@@ -228,12 +233,13 @@ if __name__ == '__main__':
         plt.show()
 
 
-    elif mode == 'edge':
+    elif results_mode == 'edge':
         edge = np.load(file_path)
         file_name = file_path.split('/')[-1].split('.')[0]
-       
-        edge_clip = edge * (edge>edge.min())
-        plot_weights_connectome(edge_clip,threshold='99.9%',size=200,title='Edge Importance ' + task + ': ' + file_name + ' - Zero Clipped')
+
+        edge_mode = mode(edge)[0][0][0] #mode is the baseline weight value
+        edge_clip = edge * (edge>edge_mode)
+        plot_weights_connectome(edge_clip,threshold='99.5%',size=200,title='Edge Importance ' + task + ': ' + file_name + ' - Zero Clipped')
 
         d_edge_clip, macro_edge_clip = get_macro_matrix(edge_clip,type='sum')
         plot_macro_matrix(macro_edge_clip,title='Macro Matrix - Zero Clipped ' + task)
@@ -241,5 +247,8 @@ if __name__ == '__main__':
         idx_max, w_max, max_mat = get_max_weights(edge,0.1)
         d_edgemax, macro_edgemax = get_macro_matrix(max_mat,type='sum')
         plot_macro_matrix(macro_edgemax,title='Macro Matrix - Max 10% weights ' + task)
-        max_norm = (max_mat - max_mat.min()) / (max_mat.max() - max_mat.min())
+        # max_norm = (max_mat - max_mat.min()) / (max_mat.max() - max_mat.min())
 
+        #save CSV:
+        # output_csv = '/'.join(file_path.split('/')[:-1])
+        # pd.DataFrame(edge_clip).to_csv(output_csv + '/connectome_'+file_name+'.csv',header=False,index=False)
