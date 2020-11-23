@@ -259,7 +259,7 @@ class ACERTA_dyslexic_ST(Dataset):
         self.adj_matrix = self.generate_mean_adj_rst(file_rst,self.ids,threshold=adj_threshold)
         
         if prune:
-            self.adj_matrix = self.prune_macro_region(self.adj_matrix,3)
+            self.adj_matrix = prune_macro_region(self.adj_matrix,3)
         
         train_ids, test_ids = train_test_split(self.ids,train_size=split,stratify=labels)
 
