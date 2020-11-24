@@ -361,6 +361,11 @@ class TemporalModel(nn.Module):
             st_gcn(64, 64, kernel_size, 1, residual=False, **kwargs),
             st_gcn(64, 64, kernel_size, 1, residual=False, **kwargs),
             st_gcn(64, 64, kernel_size, 1, residual=False, **kwargs),
+            # new layers
+            # st_gcn(64, 64, kernel_size, 1, residual=False, **kwargs),
+            # st_gcn(64, 64, kernel_size, 1, residual=False, **kwargs),
+            # st_gcn(64, 64, kernel_size, 1, residual=False, **kwargs)
+
             #st_gcn(64, 128, kernel_size, 2, **kwargs),
             #st_gcn(128, 128, kernel_size, 1, **kwargs),
             #st_gcn(128, 128, kernel_size, 1, **kwargs),

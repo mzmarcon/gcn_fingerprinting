@@ -55,7 +55,7 @@ for visit in visits:
         nifti_files = glob.glob(in_files+visit+'/PSC.*')
         print(visit)
         for subj_id in subject_ids:
-            subject = subj_id[0]
+            subject = subj_id
             subject_file = list(filter(re.compile(".*"+subject).match,nifti_files))
             if subject_file:
                 print("Preparing subject {}".format(subject))

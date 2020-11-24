@@ -51,16 +51,18 @@ if __name__ == '__main__':
                         help='Name of output file containing results metrics.')
     parser.add_argument('--prune', action='store_true',
                         help='Whether to prune out cerebellum.')
+    parser.add_argument('--window_t', type=int, default=300,
+                        help='Window size for timeseries augmentation.')
     args = parser.parse_args()
 
     # load dataset
     if args.task == 'dyslexia':
-        dataset = ACERTA_dyslexic_ST(args.split,args.condition,args.adj_threshold,args.prune)
+        dataset = ACERTA_dyslexic_ST(args.split,args.condition,args.adj_threshold,args.window_t,args.prune)
         output_path = 'output/dyslexia/'
         checkpoint = 'checkpoints/dyslexia/'
 
     elif args.task == 'reading':
-        dataset = ACERTA_reading_ST(args.split,args.condition,args.adj_threshold,args.prune)
+        dataset = ACERTA_reading_ST(args.split,args.condition,args.adj_threshold,args.window_t,args.prune)
         output_path = 'output/reading/'
         checkpoint = 'checkpoints/reading/'
     

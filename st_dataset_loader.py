@@ -14,7 +14,7 @@ from collections import defaultdict
 from glob import glob
 
 class ACERTA_reading_ST(Dataset):
-    def __init__(self, split=0.8, condition='none', adj_threshold=0.0, window_t=320, prune=True):
+    def __init__(self, split=0.8, condition='none', adj_threshold=0.0, window_t=320, prune=False):
         self.split = split
 
         data_path = 'data/'
@@ -65,6 +65,7 @@ class ACERTA_reading_ST(Dataset):
             raise ValueError("Dataset Double Dipping.")
         else:
             print("Dataset check.")
+        print("Prune: ",prune)
 
     def __getitem__(self, idx):
 
@@ -218,7 +219,7 @@ class ACERTA_reading_ST(Dataset):
             if 'visit1' in list(file_cn[sub_id].keys()):
                 data_task = file_cn[sub_id]['visit1']['cn_matrix'][:]
                 cn_matrix_list.append(data_task)
-            elif 'visit2' in list(file_cn[sub_id].keys()):
+            if 'visit2' in list(file_cn[sub_id].keys()):
                 data_task = file_cn[sub_id]['visit2']['cn_matrix'][:]
                 cn_matrix_list.append(data_task)
 
@@ -235,7 +236,7 @@ class ACERTA_dyslexic_ST(Dataset):
     """
     Dataset class for dyslexia classification
     """
-    def __init__(self, split=0.8, input_type='betas', condition='all', adj_threshold=0.0, prune=False):
+    def __init__(self, split=0.8, condition='all', adj_threshold=0.0, window_t=300, prune=False):
         self.split = split
 
         data_path = 'data/'
@@ -243,12 +244,14 @@ class ACERTA_dyslexic_ST(Dataset):
         rst_data_file = data_path + 'rst_cn_data.hdf5'
         schools_cn_data_file = data_path + 'shen_cn_task_schools.hdf5'
         psc_schools_file = data_path + 'shen_psc_task_schools.hdf5'
+        ambac_cn_data_file = data_path + 'shen_cn_task_AMBAC.hdf5'
         psc_ambac_file = hdf5_path + 'shen_psc_task_AMBAC.hdf5'
         dyslexic_labels = data_path + 'dyslexic_labels.csv'
         stimuli_path = data_path + 'stimuli2/'
 
         file_rst = h5py.File(rst_data_file, 'r')
-        file_cn_schools = h5py.File(rst_data_file, 'r')        
+        file_cn_schools = h5py.File(schools_cn_data_file, 'r')        
+        file_cn_ambac = h5py.File(ambac_cn_data_file, 'r')        
         file_schools = h5py.File(psc_schools_file, 'r')
         file_ambac = h5py.File(psc_ambac_file, 'r')
         
@@ -257,6 +260,7 @@ class ACERTA_dyslexic_ST(Dataset):
         labels = csv_file['label'].tolist()
 
         self.adj_matrix = self.generate_mean_adj_rst(file_rst,self.ids,threshold=adj_threshold)
+        # self.adj_matrix = self.generate_mean_adj(file_cn_schools,file_cn_ambac,self.ids,threshold=adj_threshold)
         
         if prune:
             self.adj_matrix = prune_macro_region(self.adj_matrix,3)
@@ -264,7 +268,7 @@ class ACERTA_dyslexic_ST(Dataset):
         train_ids, test_ids = train_test_split(self.ids,train_size=split,stratify=labels)
 
         self.dataset, label_dict = self.process_psc_reading_dataset(file_schools,file_ambac,stimuli_path,self.ids,labels,self.adj_matrix,\
-                                                        window_t=300,condition=condition,window=True)
+                                                        window_t=window_t,condition=condition,window=True)
 
         self.train_idx=[] 
         for item in train_ids: 
@@ -278,6 +282,7 @@ class ACERTA_dyslexic_ST(Dataset):
             raise ValueError("Dataset Double Dipping.")
         else:
             print("Dataset check.")
+        print("Prune: ",prune)
 
     def __getitem__(self, idx):
 
@@ -407,14 +412,18 @@ class ACERTA_dyslexic_ST(Dataset):
 
         return adj_rst
 
-    def generate_mean_adj(self,file_cn,ids,threshold):
+    def generate_mean_adj(self,file_cn_schools,file_cn_ambac,ids,threshold):
         cn_matrix_list = []
 
         for sub_id in ids:
-            if sub_id in list(file_cn.keys()):
-                data_rst = file_cn[sub_id]['visit1']['cn_matrix'][:]
+            if sub_id in list(file_cn_schools.keys()):
+                data_rst = file_cn_schools[sub_id]['visit1']['cn_matrix'][:]
                 cn_matrix_list.append(data_rst)
-        
+
+            if sub_id in list(file_cn_ambac.keys()):
+                data_rst = file_cn_ambac[sub_id]['visit1']['cn_matrix'][:]
+                cn_matrix_list.append(data_rst)
+
         cn_matrix = np.mean(cn_matrix_list,axis=0)
         adj_rst, _ = get_adjacency(cn_matrix,threshold)
 
