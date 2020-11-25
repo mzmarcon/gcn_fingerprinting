@@ -199,7 +199,7 @@ if __name__ == '__main__':
     fpr, tpr, thresholds = roc_curve(y_true, torch.tensor(y_output).cpu())
     auc_score = roc_auc_score(y_true, y_prediction)
 
-    outfile_id = len(os.listdir(output_path)) + 1
+    outfile_id = len([file for file in os.listdir(output_path) if 'outfile' in file]) + 1
     outfile_name = output_path + args.outfile + '_' + str(outfile_id)
     checkpoint_id = len(os.listdir(checkpoint)) + 1
 

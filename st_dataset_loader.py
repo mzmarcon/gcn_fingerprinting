@@ -18,12 +18,13 @@ class ACERTA_reading_ST(Dataset):
         self.split = split
 
         data_path = 'data/'
-        # rst_data_file = data_path + 'rst_cn_data.hdf5'
+        rst_data_file = data_path + 'rst_cn_data.hdf5'
         psc_cn_data_file = data_path + 'shen_cn_task_schools.hdf5'
         psc_data_file = data_path + 'shen_psc_task_schools.hdf5'
         reading_labels = data_path + 'reading_labels.csv'
         stimuli_path = data_path + 'stimuli2/'
 
+        file_rst = h5py.File(rst_data_file, 'r')
         file_cn = h5py.File(psc_cn_data_file, 'r')
         file_task = h5py.File(psc_data_file, 'r')
         
@@ -44,6 +45,7 @@ class ACERTA_reading_ST(Dataset):
         self.ids_visit_list = [sub_id + 'visit' + str(v) for sub_id,v in tup_list[:]]
 
         self.adj_matrix = self.generate_mean_adj(file_cn,ids,threshold=adj_threshold)
+        # self.adj_matrix = self.generate_mean_adj_rst(file_rst,ids,threshold=adj_threshold)
 
         if prune:
             self.adj_matrix = prune_macro_region(self.adj_matrix,3)
@@ -259,8 +261,8 @@ class ACERTA_dyslexic_ST(Dataset):
         self.ids = csv_file['id'].tolist()
         labels = csv_file['label'].tolist()
 
-        self.adj_matrix = self.generate_mean_adj_rst(file_rst,self.ids,threshold=adj_threshold)
-        # self.adj_matrix = self.generate_mean_adj(file_cn_schools,file_cn_ambac,self.ids,threshold=adj_threshold)
+        # self.adj_matrix = self.generate_mean_adj_rst(file_rst,self.ids,threshold=adj_threshold)
+        self.adj_matrix = self.generate_mean_adj(file_cn_schools,file_cn_ambac,self.ids,threshold=adj_threshold)
         
         if prune:
             self.adj_matrix = prune_macro_region(self.adj_matrix,3)
@@ -425,7 +427,6 @@ class ACERTA_dyslexic_ST(Dataset):
                 cn_matrix_list.append(data_rst)
 
         cn_matrix = np.mean(cn_matrix_list,axis=0)
-        adj_rst, _ = get_adjacency(cn_matrix,threshold)
+        adj_matrix, _ = get_adjacency(cn_matrix,threshold)
 
-        return adj_rst
-
+        return adj_matrix

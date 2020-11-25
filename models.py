@@ -473,7 +473,7 @@ class st_gcn(nn.Module):
                  out_channels,
                  kernel_size,
                  stride=1,
-                 dropout=0.5,
+                 dropout=0.6,
                  residual=True):
         super().__init__()
         # print("Dropout={}".format(dropout))

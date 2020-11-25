@@ -171,3 +171,4 @@ def prune_macro_region(matrix,target_region,csv_path='data/shen_268_parcellation
         matrix[item] = np.zeros(268) 
     
     return matrix
+    
