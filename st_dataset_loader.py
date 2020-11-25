@@ -44,13 +44,13 @@ class ACERTA_reading_ST(Dataset):
         tup_list = list(zip(ids,visits))
         self.ids_visit_list = [sub_id + 'visit' + str(v) for sub_id,v in tup_list[:]]
 
-        self.adj_matrix = self.generate_mean_adj(file_cn,ids,threshold=adj_threshold)
+        self.train_ids, self.test_ids = train_test_split(self.ids_visit_list,train_size=split,stratify=labels)
+
+        self.adj_matrix = self.generate_mean_adj(file_cn,self.train_ids,threshold=adj_threshold)
         # self.adj_matrix = self.generate_mean_adj_rst(file_rst,ids,threshold=adj_threshold)
 
         if prune:
             self.adj_matrix = prune_macro_region(self.adj_matrix,3)
-
-        self.train_ids, self.test_ids = train_test_split(self.ids_visit_list,train_size=split,stratify=labels)
 
         self.dataset, self.label_dict = self.process_psc_reading_dataset(file_task,stimuli_path,ids,labels,visits,self.adj_matrix,\
                                                         window_t=window_t,condition=condition,window=True)
@@ -261,14 +261,14 @@ class ACERTA_dyslexic_ST(Dataset):
         self.ids = csv_file['id'].tolist()
         labels = csv_file['label'].tolist()
 
+        train_ids, test_ids = train_test_split(self.ids,train_size=split,stratify=labels)
+
         # self.adj_matrix = self.generate_mean_adj_rst(file_rst,self.ids,threshold=adj_threshold)
-        self.adj_matrix = self.generate_mean_adj(file_cn_schools,file_cn_ambac,self.ids,threshold=adj_threshold)
+        self.adj_matrix = self.generate_mean_adj(file_cn_schools,file_cn_ambac,train_ids,threshold=adj_threshold)
         
         if prune:
             self.adj_matrix = prune_macro_region(self.adj_matrix,3)
         
-        train_ids, test_ids = train_test_split(self.ids,train_size=split,stratify=labels)
-
         self.dataset, label_dict = self.process_psc_reading_dataset(file_schools,file_ambac,stimuli_path,self.ids,labels,self.adj_matrix,\
                                                         window_t=window_t,condition=condition,window=True)
 
