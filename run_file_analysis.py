@@ -133,6 +133,13 @@ def plot_macro_matrix(macro_matrix,title='',cmap='OrRd'):
     plt.title(title,fontsize=14)
     plt.show()
 
+def save_adj_csv(matrix,file_path,title=''):
+
+    file_name = file_path.split('/')[-1].split('.')[0]
+    print("Creating ADJ matrix CSV for: ",file_name)
+    output_csv = '/'.join(file_path.split('/')[:-1])
+    pd.DataFrame(matrix).to_csv(output_csv + '/connectome_'+file_name+title+'.csv',header=False,index=False)
+
 
 if __name__ == '__main__':
  
@@ -176,7 +183,7 @@ if __name__ == '__main__':
         print("Results summary:")
         print("Final training loss: {:.3f} | Final test loss: {:.3f}".format(np.mean(training_loss[-1]),torch.mean(torch.Tensor(list(test_loss[-1])))))
         print("Final test accuracy: {:.3f} | Top test accuracy: {:.3f}".format(acc_list[-1],acc_list.max()))
-        print("AUC: {} | Precision: {} | Recall: {} | F-score: {}".format(auc,precision,recall,fscore))
+        print("AUC: {:.3f} | Precision: {:.3f} | Recall: {:.3f} | F-score: {:.3f}".format(auc,precision,recall,fscore))
         print("Confusion Matrix:\n",cm)
 
         ### Plots ###
@@ -244,11 +251,12 @@ if __name__ == '__main__':
         d_edge_clip, macro_edge_clip = get_macro_matrix(edge_clip,type='sum')
         plot_macro_matrix(macro_edge_clip,title='Macro Matrix - Zero Clipped ' + task)
 
-        idx_max, w_max, max_mat = get_max_weights(edge,0.1)
+        idx_max, w_max, max_mat = get_max_weights(edge_clip,0.05)
         d_edgemax, macro_edgemax = get_macro_matrix(max_mat,type='sum')
-        plot_macro_matrix(macro_edgemax,title='Macro Matrix - Max 10% weights ' + task)
+        plot_macro_matrix(macro_edgemax,title='Macro Matrix - Max 5% weights ' + task)
         # max_norm = (max_mat - max_mat.min()) / (max_mat.max() - max_mat.min())
 
         #save CSV:
+	# save_adj_csv(edge_clip,file_path)
         # output_csv = '/'.join(file_path.split('/')[:-1])
         # pd.DataFrame(edge_clip).to_csv(output_csv + '/connectome_'+file_name+'.csv',header=False,index=False)
