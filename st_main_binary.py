@@ -79,14 +79,14 @@ if __name__ == '__main__':
     test_loader = DataLoader(dataset, drop_last=False,
                                 batch_size=args.test_batch, sampler=test_sampler)
 
-    model = TemporalModel(1,1,None,True,dataset.adj_matrix)
+    model = TemporalModel(1,1,None,True,dataset.adj_matrix,args.dropout)
     model.to(device)
     # criterion = nn.BCEWithLogitsLoss()
     criterion = nn.BCELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
                                 weight_decay=args.weight_decay)
 
-    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.75,patience=args.patience,min_lr=1e-6)
+    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.6,patience=args.patience,min_lr=1e-6)
 
 #Training-----------------------------------------------------------------------------
 

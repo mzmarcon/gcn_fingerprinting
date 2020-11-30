@@ -329,7 +329,7 @@ class TemporalModel(nn.Module):
     """
 
     def __init__(self, in_channels, num_class, graph_args,
-                 edge_importance_weighting, adj_matrix, **kwargs):
+                 edge_importance_weighting, adj_matrix, dropout, **kwargs):
         super().__init__()
 
         # load graph
@@ -357,10 +357,10 @@ class TemporalModel(nn.Module):
         self.data_bn = nn.BatchNorm1d(in_channels * A.size(1))
         kwargs0 = {k: v for k, v in kwargs.items() if k != 'dropout'}
         self.st_gcn_networks = nn.ModuleList((
-            st_gcn(in_channels, 64, kernel_size, 1, residual=False, **kwargs0),
-            st_gcn(64, 64, kernel_size, 1, residual=False, **kwargs),
-            st_gcn(64, 64, kernel_size, 1, residual=False, **kwargs),
-            st_gcn(64, 64, kernel_size, 1, residual=False, **kwargs),
+            st_gcn(in_channels, 64, kernel_size, 1, residual=False, dropout=dropout, **kwargs0),
+            st_gcn(64, 64, kernel_size, 1, residual=False, dropout=dropout, **kwargs),
+            st_gcn(64, 64, kernel_size, 1, residual=False, dropout=dropout, **kwargs),
+            st_gcn(64, 64, kernel_size, 1, residual=False, dropout=dropout, **kwargs),
             # new layers
             # st_gcn(64, 64, kernel_size, 1, residual=False, **kwargs),
             # st_gcn(64, 64, kernel_size, 1, residual=False, **kwargs),
@@ -477,7 +477,7 @@ class st_gcn(nn.Module):
                  dropout=0.6,
                  residual=True):
         super().__init__()
-        # print("Dropout={}".format(dropout))
+        print("Dropout={}".format(dropout))
         assert len(kernel_size) == 2
         assert kernel_size[0] % 2 == 1
         padding = ((kernel_size[0] - 1) // 2, 0)
