@@ -9,6 +9,7 @@ import itertools
 import os
 import pandas as pd
 import copy
+from collections import defaultdict
 from scipy.stats import mode
 
 def get_max_weights(matrix,percentual):
@@ -66,7 +67,7 @@ def plot_weights_connectome(weights_mask,threshold='90%',size=500,title='',color
     plotting.show()
 
 
-def get_macro_matrix(matrix,csv_path='data/shen_268_parcellation_networklabels.csv',type='delta'):
+def get_macro_matrix(matrix,csv_path='data/shen_268_parcellation_networklabels.csv',analysis='sum'):
     """
     Function that gets nodes for each macro region. Macro matrix contains delta between number of 
     positive and negative edges.
@@ -87,32 +88,31 @@ def get_macro_matrix(matrix,csv_path='data/shen_268_parcellation_networklabels.c
 
     # Create macro matrix with delta between positive and negative values in each region.
     macro_matrix = np.zeros([network_n,network_n])
-    
-    if type == 'delta':
-        for n in range(network_n):
-            positive_n = len(matrix[d[n]][matrix[d[n]]>0]) #positive node values for macro region n
-            negative_n = len(matrix[d[n]][matrix[d[n]]<0]) #negative node values for macro region n
-            delta = positive_n - negative_n
-            macro_matrix[n,n] = delta
-    
-    elif type == 'sum':
-        for n in range(network_n):
-            sum_ = np.sum(matrix[d[n]])
-            macro_matrix[n,n] = sum_
-    
+    intersection = defaultdict(list)
+       
     # Fill matrix
-    perm = list(itertools.permutations(range(network_n),2))
-    for item in perm:
-        a = item[0] 
-        b = item[1] 
-        result_ab =  macro_matrix[a,a] + macro_matrix[b,b] 
-        macro_matrix[a,b] = result_ab
+    comb = list(itertools.combinations(range(network_n),2))
+    for item in comb:
+        intersection = defaultdict(list) 
+        for pair in comb: 
+            a = pair[0]
+            b = pair[1]
+            for x_item in d[pair[0]][0]: 
+                for y_item in d[pair[1]][0]: 
+                    intersection[pair].append(matrix[x_item,y_item])
+            if analysis == 'sum':
+                result = np.sum(intersection[pair])
+            elif analysis == 'mean':
+                result = np.mean(intersection[pair])
+            elif analysis == 'degree':
+                result = np.count_nonzero(intersection[pair])
+            macro_matrix[pair] = result
+            macro_matrix[b,a] = result
 
     return d, macro_matrix
 
 def plot_macro_matrix(macro_matrix,title='',cmap='OrRd'):
 
-    mask = np.triu(macro_matrix,1)
     # cmap = sns.diverging_palette(220, 20, as_cmap=True)
     # cmap = sns.cubehelix_palette(as_cmap=True)
 
@@ -122,8 +122,7 @@ def plot_macro_matrix(macro_matrix,title='',cmap='OrRd'):
                      'Motor','Visual I','Visual II', 'Visual Association']
 
     fig, ax = plt.subplots(figsize=(15,10))
-    # sns.set_context("paper", font_scale=1.2)
-    ax = sns.heatmap(np.tril(macro_matrix), mask=mask, cmap=cmap, xticklabels=x_labels,
+    ax = sns.heatmap(np.tril(macro_matrix).astype(float), mask=np.triu(macro_matrix), cmap=cmap, xticklabels=x_labels,
                 yticklabels=y_labels, square=True, linewidths=.3, cbar_kws={'label': 'Sum of Weights'})
 
     ax.set_xticklabels(x_labels,rotation=16,ha='right',rotation_mode='anchor',fontsize=14)
@@ -188,6 +187,7 @@ if __name__ == '__main__':
 
         ### Plots ###
 
+        # Loss
         fig, ax = plt.subplots(figsize=(10,8))
         plt.plot(range(counter),np.mean(training_loss,axis=1), label='Training loss')
         plt.plot(range(counter),np.mean(test_loss,axis=1), label='Validation loss')
@@ -196,12 +196,13 @@ if __name__ == '__main__':
         plt.ylabel('Loss',fontsize=20)
         plt.legend(prop={'size': 16})
         plt.grid()
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.spines["left"].set_visible(False)
-        ax.spines["bottom"].set_visible(False)
+        # ax.spines["top"].set_visible(False)
+        # ax.spines["right"].set_visible(False)
+        # ax.spines["left"].set_visible(False)
+        # ax.spines["bottom"].set_visible(False)
         plt.show()
 
+        # Accuracy
         fig, ax = plt.subplots(figsize=(10,8))
         if train_acc:
             plt.plot(train_acc_list,label="Train accuracy")
@@ -217,6 +218,7 @@ if __name__ == '__main__':
         ax.spines["bottom"].set_visible(False)
         plt.show()
 
+        # Confusion Matrix
         fig, ax = plt.subplots(figsize=(10,8))  
         sns.heatmap(cm, annot=True, ax = ax, fmt='.2g',cmap='Blues',annot_kws={"fontsize":18})  
         ax.set_xlabel('Predicted',fontsize=20)
@@ -228,9 +230,10 @@ if __name__ == '__main__':
             ax.xaxis.set_ticklabels(['Good', 'Bad'],fontsize=18); ax.yaxis.set_ticklabels(['Good', 'Bad'],fontsize=18)
 
         plt.show()
-
+        
+        # ROC
         fig, ax = plt.subplots(figsize=(10,8))  
-        plt.plot(fpr,tpr, label='ROC curve (area = %0.2f)' % auc)
+        plt.plot(fpr,tpr, label='ROC curve (AUC = %0.2f)' % auc)
         plt.plot([0, 1], [0, 1], color='grey', linestyle='--')
         plt.grid()
         plt.title('ROC Curve',fontsize=20)
@@ -248,15 +251,14 @@ if __name__ == '__main__':
         edge_clip = edge * (edge>edge_mode)
         plot_weights_connectome(edge_clip,threshold='99.5%',size=200,title='Edge Importance ' + task + ': ' + file_name + ' - Zero Clipped')
 
-        d_edge_clip, macro_edge_clip = get_macro_matrix(edge_clip,type='sum')
-        plot_macro_matrix(macro_edge_clip,title='Macro Matrix - Zero Clipped ' + task)
+        d_edge_clip, macro_edge_clip = get_macro_matrix(edge_clip,analysis='sum')
+        plot_macro_matrix(macro_edge_clip,title='Macro Matrix - Zero Clipped Sum - ' + task)
 
-        idx_max, w_max, max_mat = get_max_weights(edge_clip,0.05)
-        d_edgemax, macro_edgemax = get_macro_matrix(max_mat,type='sum')
-        plot_macro_matrix(macro_edgemax,title='Macro Matrix - Max 5% weights ' + task)
-        # max_norm = (max_mat - max_mat.min()) / (max_mat.max() - max_mat.min())
+        d_edge_clip, macro_edge_clip = get_macro_matrix(edge_clip,analysis='mean')
+        plot_macro_matrix(macro_edge_clip,title='Macro Matrix - Zero Clipped Mean - ' + task)
+
+        d_edge_clip, macro_edge_clip = get_macro_matrix(edge_clip,analysis='degree')
+        plot_macro_matrix(macro_edge_clip,title='Macro Matrix - Zero Clipped Degree - ' + task)
 
         #save CSV:
-	# save_adj_csv(edge_clip,file_path)
-        # output_csv = '/'.join(file_path.split('/')[:-1])
-        # pd.DataFrame(edge_clip).to_csv(output_csv + '/connectome_'+file_name+'.csv',header=False,index=False)
+        # save_adj_csv(edge_clip,file_path)
