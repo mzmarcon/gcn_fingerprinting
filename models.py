@@ -385,8 +385,8 @@ class TemporalModel(nn.Module):
             self.edge_importance = [1] * len(self.st_gcn_networks)
 
         # fcn for prediction (**number of fully connected layers**)
-        # self.fcn = nn.Conv2d(64, num_class, kernel_size=1)
-        self.fcn = nn.Linear(64,num_class)
+        self.fcn = nn.Conv2d(64, num_class, kernel_size=1)
+        # self.fcn = nn.Linear(64,num_class)
         self.sig = nn.Sigmoid()
 
     def forward(self, x):
@@ -413,7 +413,8 @@ class TemporalModel(nn.Module):
 
         # prediction
         # pdb.set_trace()
-        x = self.fcn(x[:,:,0,0])
+        # x = self.fcn(x[:,:,0,0])
+        x = self.fcn(x)
         x = self.sig(x)
 
         x = x.view(x.size(0), -1)

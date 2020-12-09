@@ -47,22 +47,26 @@ if __name__ == '__main__':
                         help='Whether to use learning rate scheduler')
     parser.add_argument('--patience', type=int, default=10,
                         help='Scheduler patience in epochs.')
+    parser.add_argument('--factor', type=float, default=0.6,
+                        help='Factor for scheduler updates.')
     parser.add_argument('--outfile', type=str, default='outfile',
                         help='Name of output file containing results metrics.')
     parser.add_argument('--prune', action='store_true',
                         help='Whether to prune out cerebellum.')
     parser.add_argument('--window_t', type=int, default=300,
                         help='Window size for timeseries augmentation.')
+    parser.add_argument('--binary_adj', action='store_true',
+                        help='Wether to use unweighted or "binary" adjacency.')
     args = parser.parse_args()
 
     # load dataset
     if args.task == 'dyslexia':
-        dataset = ACERTA_dyslexic_ST(args.split,args.condition,args.adj_threshold,args.window_t,args.prune)
+        dataset = ACERTA_dyslexic_ST(args.split,args.condition,args.adj_threshold,args.window_t,args.prune,args.binary_adj)
         output_path = 'output/dyslexia/'
         checkpoint = 'checkpoints/dyslexia/'
 
     elif args.task == 'reading':
-        dataset = ACERTA_reading_ST(args.split,args.condition,args.adj_threshold,args.window_t,args.prune)
+        dataset = ACERTA_reading_ST(args.split,args.condition,args.adj_threshold,args.window_t,args.prune,args.binary_adj)
         output_path = 'output/reading/'
         checkpoint = 'checkpoints/reading/'
     
@@ -86,7 +90,8 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
                                 weight_decay=args.weight_decay)
 
-    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.6,patience=args.patience,min_lr=1e-6)
+    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=args.factor,patience=args.patience,min_lr=1e-6)
+    # lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20,50,70,80,90], gamma=0.5, last_epoch=-1)
 
 #Training-----------------------------------------------------------------------------
 
@@ -125,7 +130,8 @@ if __name__ == '__main__':
                         correct += 1
                     ex_count_train += 1
 
-        if e % 99 == 0 and e>0:
+        # if e % 99 == 0 and e>0:
+        if e == args.epochs-1:
             edge_imp_id = len(os.listdir(output_path+'edge_importance/')) + 1
             for importance in model.edge_importance:
                 edge_importances = importance*importance+torch.transpose(importance*importance,0,1)
@@ -139,6 +145,7 @@ if __name__ == '__main__':
         training_losses.append(epoch_loss)
         if not args.no_scheduler:
             lr_scheduler.step(np.mean(epoch_loss))
+            # lr_scheduler.step()
 
 #Testing-----------------------------------------------------------------------------
         model.eval()
@@ -204,6 +211,6 @@ if __name__ == '__main__':
     checkpoint_id = len(os.listdir(checkpoint)) + 1
 
     np.savez(outfile_name, training_loss=training_losses, test_loss=test_losses, counter=counter, accuracy=accuracy_list, train_accuracy=train_accuracy_list,\
-            cm=cm,fpr=fpr,tpr=tpr,thresholds=thresholds,auc_score=auc_score,y_true=y_true,y_prediction=y_prediction)
-    torch.save(model.state_dict(), f"{checkpoint}chk_ST_{args.task}_{checkpoint_id}.pth")
+            cm=cm,fpr=fpr,tpr=tpr,thresholds=thresholds,auc_score=auc_score,y_true=y_true,y_prediction=y_prediction,args=args)
+    # torch.save(model.state_dict(), f"{checkpoint}chk_ST_{args.task}_{checkpoint_id}.pth")
 

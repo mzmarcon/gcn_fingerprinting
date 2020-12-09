@@ -23,7 +23,7 @@ def get_adjacency(cn_matrix, threshold):
                 sparse_indices[node] = [neighbors[i]]
             else:
                 sparse_indices[node].append(neighbors[i])
-    return sparse_matrix, sparse_indices
+    return sparse_matrix, mask
 
 def chebyshev_polynomials(adj, k):
     """Calculate Chebyshev polynomials up to order k. Return a list of sparse matrices (tuple representation)."""

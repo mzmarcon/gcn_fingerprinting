@@ -14,7 +14,7 @@ from collections import defaultdict
 from glob import glob
 
 class ACERTA_reading_ST(Dataset):
-    def __init__(self, split=0.8, condition='none', adj_threshold=0.0, window_t=320, prune=False):
+    def __init__(self, split=0.8, condition='none', adj_threshold=0.0, window_t=320, prune=False, binary_adj=False):
         self.split = split
 
         data_path = 'data/'
@@ -46,7 +46,7 @@ class ACERTA_reading_ST(Dataset):
 
         self.train_ids, self.test_ids = train_test_split(self.ids_visit_list,train_size=split,stratify=labels)
 
-        self.adj_matrix = self.generate_mean_adj(file_cn,self.train_ids,threshold=adj_threshold)
+        self.adj_matrix = self.generate_mean_adj(file_cn,self.train_ids,threshold=adj_threshold,binary=binary_adj)
         # self.adj_matrix = self.generate_mean_adj_rst(file_rst,ids,threshold=adj_threshold)
 
         if prune:
@@ -197,7 +197,7 @@ class ACERTA_reading_ST(Dataset):
 
         return dataset, label_dict
 
-    def generate_mean_adj_rst(self,file_rst,ids,threshold):
+    def generate_mean_adj_rst(self,file_rst,ids,threshold,binary=False):
         cn_matrix_list = []
 
         for sub_id in ids:
@@ -210,25 +210,31 @@ class ACERTA_reading_ST(Dataset):
         
         cn_matrix = np.mean(cn_matrix_list,axis=0)
 
-        adj_rst, _ = get_adjacency(cn_matrix,threshold)
+        adj_rst, mask = get_adjacency(cn_matrix,threshold)
 
-        return adj_rst
+        if binary:
+            return mask
+        else:
+            return adj_rst
 
-    def generate_mean_adj(self,file_cn,ids,threshold):
+    def generate_mean_adj(self,file_cn,ids,threshold,binary=False):
         cn_matrix_list = []
 
         for sub_id in ids:
-            if 'visit1' in list(file_cn[sub_id].keys()):
-                data_task = file_cn[sub_id]['visit1']['cn_matrix'][:]
+            if 'visit1' in sub_id:
+                data_task = file_cn[sub_id[:-6]]['visit1']['cn_matrix'][:]
                 cn_matrix_list.append(data_task)
-            if 'visit2' in list(file_cn[sub_id].keys()):
-                data_task = file_cn[sub_id]['visit2']['cn_matrix'][:]
+            if 'visit2' in sub_id:
+                data_task = file_cn[sub_id[:-6]]['visit2']['cn_matrix'][:]
                 cn_matrix_list.append(data_task)
 
         cn_matrix = np.mean(cn_matrix_list,axis=0)
-        adj_rst, _ = get_adjacency(cn_matrix,threshold)
+        adj_matrix, mask = get_adjacency(cn_matrix,threshold)
 
-        return adj_rst
+        if binary:
+            return mask
+        else:
+            return adj_matrix
 
 """""""""""""""
 Dyslexia
@@ -238,7 +244,7 @@ class ACERTA_dyslexic_ST(Dataset):
     """
     Dataset class for dyslexia classification
     """
-    def __init__(self, split=0.8, condition='all', adj_threshold=0.0, window_t=300, prune=False):
+    def __init__(self, split=0.8, condition='none', adj_threshold=0.0, window_t=300, prune=False, binary_adj=False):
         self.split = split
 
         data_path = 'data/'
@@ -264,7 +270,7 @@ class ACERTA_dyslexic_ST(Dataset):
         train_ids, test_ids = train_test_split(self.ids,train_size=split,stratify=labels)
 
         # self.adj_matrix = self.generate_mean_adj_rst(file_rst,self.ids,threshold=adj_threshold)
-        self.adj_matrix = self.generate_mean_adj(file_cn_schools,file_cn_ambac,train_ids,threshold=adj_threshold)
+        self.adj_matrix = self.generate_mean_adj(file_cn_schools,file_cn_ambac,train_ids,threshold=adj_threshold,binary=binary_adj)
         
         if prune:
             self.adj_matrix = prune_macro_region(self.adj_matrix,3)
@@ -325,7 +331,7 @@ class ACERTA_dyslexic_ST(Dataset):
     def __len__(self):
         return len(self.dataset)
 
-    def process_psc_reading_dataset(self,file_schools,file_ambac,stimuli_path,ids,labels,adj_rst,window_t=12,condition='all',window=False):
+    def process_psc_reading_dataset(self,file_schools,file_ambac,stimuli_path,ids,labels,adj_rst,window_t=12,condition='none',window=False):
 
         print("Loading PSC dataset")
         dataset = []
@@ -345,11 +351,13 @@ class ACERTA_dyslexic_ST(Dataset):
         pse_times = [np.loadtxt(pse_files[i],dtype=int).max() for i in range(len(pse_files))]
 
         if condition == 'irr':
-            stim_times = irr_times
+            stim_times = [irr_times]
         elif condition == 'pse':
-            stim_times = pse_times
+            stim_times = [pse_times]
         elif condition == 'reg':
-            stim_times = reg_times
+            stim_times = [reg_times]
+        elif condition == 'all':
+            stim_times = [reg_times, irr_times, pse_times]
         else:
             stim_times = sorted(irr_times+reg_times+pse_times)
 
@@ -365,17 +373,34 @@ class ACERTA_dyslexic_ST(Dataset):
 
             if window:
                 if window_t<50:
-                    for onset_time in stim_times:
-                        feature = []
-                        for timestamp in range(onset_time,onset_time+window_t):
-                            feature.append(features[timestamp])
-                        feature = torch.FloatTensor(feature)
+                    if condition == 'none':
+                        for onset_time in stim_times:
+                            if window_t < 12:
+                                onset_time = onset_time + 3
+                            feature = features[onset_time:onset_time+window_t]
+                            feature = torch.FloatTensor(feature)
+                            dataset.append({
+                                'graph': feature,
+                                'label': labels[n],
+                                'info': (sub_id, visit)
+                            })
+                            label_dict[sub_id].append(element_count)
+                            element_count += 1
 
-                        dataset.append({
-                            'graph': feature,
-                            'label': labels[n],
-                            'info': (sub_id, visit)
-                        })
+                    else:   # Generates one feature with the stims for each condition. Recommended window_t = 8
+                        for stimuli in stim_times:
+                            feature = []
+                            for onset_time in stimuli:
+                                feature.extend(features[onset_time:onset_time+window_t])
+                            feature = torch.FloatTensor(feature)
+                            dataset.append({
+                                'graph': feature,
+                                'label': labels[n],
+                                'info': (sub_id, visit)
+                            })
+                            label_dict[sub_id].append(element_count)
+                            element_count += 1
+
                 else:
                     feature = features[:window_t]
                     label_dict[sub_id].append(element_count)
@@ -388,6 +413,7 @@ class ACERTA_dyslexic_ST(Dataset):
                     dataset.append(
                         {'graph': feature2,'label': labels[n],'info': (sub_id, visit)})
                     element_count += 1
+                    
             else:
                 dataset.append({
                     'graph': features,
@@ -397,7 +423,7 @@ class ACERTA_dyslexic_ST(Dataset):
 
         return dataset,label_dict
 
-    def generate_mean_adj_rst(self,file_rst,ids,threshold):
+    def generate_mean_adj_rst(self,file_rst,ids,threshold,binary=False):
         cn_matrix_list = []
 
         for sub_id in ids:
@@ -410,11 +436,15 @@ class ACERTA_dyslexic_ST(Dataset):
         
         cn_matrix = np.mean(cn_matrix_list,axis=0)
 
-        adj_rst, _ = get_adjacency(cn_matrix,threshold)
+        adj_rst, mask = get_adjacency(cn_matrix,threshold)
 
-        return adj_rst
+        if binary:
+            return mask
+        else:
+            return adj_matrix
 
-    def generate_mean_adj(self,file_cn_schools,file_cn_ambac,ids,threshold):
+
+    def generate_mean_adj(self,file_cn_schools,file_cn_ambac,ids,threshold,binary=False):
         cn_matrix_list = []
 
         for sub_id in ids:
@@ -427,6 +457,9 @@ class ACERTA_dyslexic_ST(Dataset):
                 cn_matrix_list.append(data_rst)
 
         cn_matrix = np.mean(cn_matrix_list,axis=0)
-        adj_matrix, _ = get_adjacency(cn_matrix,threshold)
+        adj_matrix, mask = get_adjacency(cn_matrix,threshold)
 
-        return adj_matrix
+        if binary:
+            return mask
+        else:
+            return adj_matrix
