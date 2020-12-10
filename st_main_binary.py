@@ -132,7 +132,8 @@ if __name__ == '__main__':
 
         # if e % 99 == 0 and e>0:
         if e == args.epochs-1:
-            edge_imp_id = len(os.listdir(output_path+'edge_importance/')) + 1
+            file_list = os.listdir(output_path+'edge_importance/')
+            edge_imp_id = np.max([int(item.split('_')[2].split('.')[0]) for item in file_list]) + 1
             for importance in model.edge_importance:
                 edge_importances = importance*importance+torch.transpose(importance*importance,0,1)
                 edge_imp = torch.squeeze(edge_importances.data).cpu().numpy()

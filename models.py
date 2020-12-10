@@ -359,8 +359,8 @@ class TemporalModel(nn.Module):
         self.st_gcn_networks = nn.ModuleList((
             st_gcn(in_channels, 64, kernel_size, 1, residual=False, dropout=dropout, **kwargs0),
             st_gcn(64, 64, kernel_size, 1, residual=False, dropout=dropout, **kwargs),
-            st_gcn(64, 64, kernel_size, 1, residual=False, dropout=dropout, **kwargs),
-            st_gcn(64, 64, kernel_size, 1, residual=False, dropout=dropout, **kwargs),
+            # st_gcn(64, 64, kernel_size, 1, residual=False, dropout=dropout, **kwargs),
+            # st_gcn(64, 64, kernel_size, 1, residual=False, dropout=dropout, **kwargs),
             # new layers
             # st_gcn(64, 64, kernel_size, 1, residual=False, **kwargs),
             # st_gcn(64, 64, kernel_size, 1, residual=False, **kwargs),

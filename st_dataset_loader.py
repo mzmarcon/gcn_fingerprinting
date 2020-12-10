@@ -46,8 +46,8 @@ class ACERTA_reading_ST(Dataset):
 
         self.train_ids, self.test_ids = train_test_split(self.ids_visit_list,train_size=split,stratify=labels)
 
-        self.adj_matrix = self.generate_mean_adj(file_cn,self.train_ids,threshold=adj_threshold,binary=binary_adj)
-        # self.adj_matrix = self.generate_mean_adj_rst(file_rst,ids,threshold=adj_threshold)
+        # self.adj_matrix = self.generate_mean_adj(file_cn,self.train_ids,threshold=adj_threshold,binary=binary_adj)
+        self.adj_matrix = self.generate_mean_adj_rst(file_rst,self.train_ids,threshold=adj_threshold)
 
         if prune:
             self.adj_matrix = prune_macro_region(self.adj_matrix,3)
@@ -201,11 +201,11 @@ class ACERTA_reading_ST(Dataset):
         cn_matrix_list = []
 
         for sub_id in ids:
-            if sub_id in list(file_rst['visit1'].keys()):
-                data_rst = file_rst['visit1'][sub_id]['cn_matrix'][:]
+            if 'visit1' in sub_id:
+                data_rst = file_rst['visit1'][sub_id[:-6]]['cn_matrix'][:]
                 cn_matrix_list.append(data_rst)
-            if sub_id in list(file_rst['visit2'].keys()):
-                data_rst = file_rst['visit2'][sub_id]['cn_matrix'][:]
+            if 'visit2' in sub_id:
+                data_rst = file_rst['visit2'][sub_id[:-6]]['cn_matrix'][:]
                 cn_matrix_list.append(data_rst)
         
         cn_matrix = np.mean(cn_matrix_list,axis=0)
@@ -269,7 +269,7 @@ class ACERTA_dyslexic_ST(Dataset):
 
         train_ids, test_ids = train_test_split(self.ids,train_size=split,stratify=labels)
 
-        # self.adj_matrix = self.generate_mean_adj_rst(file_rst,self.ids,threshold=adj_threshold)
+        # self.adj_matrix = self.generate_mean_adj_rst(file_rst,train_ids,threshold=adj_threshold)
         self.adj_matrix = self.generate_mean_adj(file_cn_schools,file_cn_ambac,train_ids,threshold=adj_threshold,binary=binary_adj)
         
         if prune:
