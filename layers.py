@@ -121,7 +121,7 @@ class TemporalGC(nn.Module):
         self.conv = nn.Conv2d(
             in_channels,
             out_channels * kernel_size,
-            kernel_size=(t_kernel_size, 1),
+            kernel_size=(self.kernel_size,t_kernel_size),
             padding=(t_padding, 0),
             stride=(t_stride, 1),
             dilation=(t_dilation, 1),
