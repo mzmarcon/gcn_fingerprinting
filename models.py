@@ -662,3 +662,114 @@ class TemporalRegressionModel(nn.Module):
         output = x.view(N, M, -1, t, v).permute(0, 2, 3, 4, 1)
         # pdb.set_trace()
         return output, feature
+
+class Temporal_FP_Model(nn.Module):
+    r"""Spatial temporal graph convolutional networks.
+
+    Args:
+        in_channels (int): Number of channels in the input data
+        num_class (int): Number of classes for the classification task
+        graph_args (dict): The arguments for building the graph
+        edge_importance_weighting (bool): If ``True``, adds a learnable
+            importance weighting to the edges of the graph
+        **kwargs (optional): Other parameters for graph convolution units
+
+    Shape:
+        - Input: :math:`(N, in_channels, T_{in}, V_{in}, M_{in})`
+        - Output: :math:`(N, num_class)` where
+            :math:`N` is a batch size,
+            :math:`T_{in}` is a length of input sequence,
+            :math:`V_{in}` is the number of graph nodes,
+            :math:`M_{in}` is the number of instance in a frame.
+    """
+
+    def __init__(self, in_channels, num_class, graph_args,
+                 edge_importance_weighting, adj_matrix, dropout, **kwargs):
+        super().__init__()
+
+        # load graph
+
+        A = adj_matrix
+        Dl = np.sum(A, 0)
+        num_node = A.shape[0]
+        #Degree matrix
+        Dn = np.zeros((num_node, num_node))
+        for i in range(num_node):
+            if Dl[i] > 0:
+                Dn[i, i] = Dl[i] ** (-0.5)
+        #Normalized adjacency matrix
+        DAD = np.dot(np.dot(Dn, A), Dn)
+
+        temp_matrix = np.zeros((1, A.shape[0], A.shape[0]))
+        temp_matrix[0] = DAD
+        A = torch.tensor(temp_matrix, dtype=torch.float32, requires_grad=False)
+        self.register_buffer('A', A)
+
+        # build networks (**number of layers, final output features, kernel size**)
+        spatial_kernel_size = A.size(0)
+        temporal_kernel_size = 11 # update temporal kernel size
+        kernel_size = (temporal_kernel_size, spatial_kernel_size)
+        self.data_bn = nn.BatchNorm1d(in_channels * A.size(1))
+        kwargs0 = {k: v for k, v in kwargs.items() if k != 'dropout'}
+        self.st_gcn_networks = nn.ModuleList((
+            st_gcn(in_channels, 64, kernel_size, 1, residual=False, dropout=dropout, **kwargs0),
+            st_gcn(64, 32, kernel_size, 1, residual=False, dropout=dropout, **kwargs),
+            st_gcn(32, 16, kernel_size, 1, residual=False, dropout=dropout, **kwargs)
+        ))
+
+        # initialize parameters for edge importance weighting
+        if edge_importance_weighting:
+            # self.edge_importance = nn.ParameterList([
+            #     nn.Parameter(torch.ones(self.A.size()))
+            #     for i in self.st_gcn_networks
+            # ])
+            self.edge_importance = nn.Parameter(torch.ones(self.A.size()))
+        else:
+            self.edge_importance = [1] * len(self.st_gcn_networks)
+
+        # fcn for prediction (**number of fully connected layers**)
+        # self.fcn = nn.Conv2d(16, num_class, kernel_size=1)
+        self.fcn = nn.Linear(64,num_class)
+        self.sig = nn.Sigmoid()
+
+    def forward_single(self, x):
+
+        # data normalization
+        N, C, T, V, M = x.size()
+        x = x.permute(0, 4, 3, 1, 2).contiguous()
+        x = x.view(N * M, V * C, T)
+        x = self.data_bn(x)
+        x = x.view(N, M, V, C, T)
+        x = x.permute(0, 1, 3, 4, 2).contiguous()
+        x = x.view(N * M, C, T, V)
+
+        # forwad
+        # for gcn, importance in zip(self.st_gcn_networks, self.edge_importance):
+        #     x, _ = gcn(x, self.A * (importance + torch.transpose(importance,1,2)))
+        #print(self.edge_importance.shape)
+        for gcn in self.st_gcn_networks:
+            x, _ = gcn(x, self.A * (self.edge_importance*self.edge_importance+torch.transpose(self.edge_importance*self.edge_importance,1,2)))
+
+        # global pooling
+        x = F.avg_pool2d(x, x.size()[2:])
+        x = x.view(N, M, -1, 1, 1).mean(dim=1)
+
+        # prediction
+        # pdb.set_trace()
+        # x = self.fcn(x[:,:,0,0])
+        x = self.fcn(x)
+        # x = self.sig(x)
+
+        x = x.view(x.size(0), -1)
+
+        return x
+
+    def forward(self, data1, data2):
+        x1 = self.forward_single(data1)
+        x2 = self.forward_single(data2)
+
+        l1_distance =  nn.PairwiseDistance(p=1.0)
+        distance_out = l1_distance(x1,x2)
+
+        return distance_out      
+
